@@ -42,8 +42,9 @@ git submodule update --init third_party/IsaacLab
 # 该补丁为 isaaclab_mimic 的 CuroboPlannerCfg 增加 use_cuda_graph / warmup
 # 可配置项，biomedical collection 的 expert 依赖它们。
 pushd third_party/IsaacLab
-if git apply --check ../scripts/patches/isaaclab-curobo-planner.patch; then
-    git apply ../scripts/patches/isaaclab-curobo-planner.patch
+# 从 IsaacLab 目录到项目根 scripts 需 "../../"。
+if git apply --check ../../scripts/patches/isaaclab-curobo-planner.patch; then
+    git apply ../../scripts/patches/isaaclab-curobo-planner.patch
     echo "Applied isaaclab-curobo-planner.patch"
 else
     echo "WARNING: 补丁未能应用（可能已应用或源码版本不同）。"

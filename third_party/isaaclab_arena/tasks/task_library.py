@@ -8,8 +8,9 @@
 # including at pytest-collection time, and the cascade pulls in pxr/USD modules before
 # SimulationApp() is created — which segfaults the sim. Instead it is imported lazily by
 # ensure_assets_registered() (called after the sim app is up), mirroring object_library.
+# assembly_task depends on the external isaaclab_arena_environments package,
+# which PharmFlow does not vendor/install, so it is excluded here.
 from isaaclab_arena.tasks import (  # noqa: F401
-    assembly_task,
     close_door_task,
     goal_pose_task,
     lift_object_task,

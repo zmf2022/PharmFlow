@@ -3,10 +3,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from .agibot.agibot import *
+# PharmFlow only uses the DROID embodiment (and its shared Franka dependency).
+# Loading the other embodiments imported extra packages (e.g. isaaclab_arena_g1)
+# that are not vendored / installed in PharmFlow, breaking collection startup.
 from .droid.droid import *
 from .franka.franka import *
-from .g1.g1 import *
-from .galbot.galbot import *
-from .gr1t2.gr1t2 import *
-from .kuka_allegro.kuka_allegro import *

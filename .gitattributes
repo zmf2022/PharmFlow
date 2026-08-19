@@ -8,3 +8,5 @@ assets/**/*.jpeg   filter=lfs diff=lfs merge=lfs -text
 assets/**/*.exr    filter=lfs diff=lfs merge=lfs -text
 assets/**/*.fbx    filter=lfs diff=lfs merge=lfs -text
 assets/**/*.dae    filter=lfs diff=lfs merge=lfs -text
+
+assets/**/*.pkl    filter=lfs diff=lfs merge=lfs -text

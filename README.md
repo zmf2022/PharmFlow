@@ -45,7 +45,6 @@ cd PharmFlow
 ```bash
 conda create -n pharm_flow python=3.12 -y
 conda activate pharm_flow
-export PHARM_FLOW_ROOT=$PWD   # 建议写入 ~/.bashrc 或 shell 配置
 ```
 
 ### 3. 执行安装脚本
