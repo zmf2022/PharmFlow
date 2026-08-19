@@ -1,0 +1,47 @@
+diff --git a/source/isaaclab_mimic/isaaclab_mimic/motion_planners/curobo/curobo_planner.py b/source/isaaclab_mimic/isaaclab_mimic/motion_planners/curobo/curobo_planner.py
+index c03db9c32..0ea4643af 100644
+--- a/source/isaaclab_mimic/isaaclab_mimic/motion_planners/curobo/curobo_planner.py
++++ b/source/isaaclab_mimic/isaaclab_mimic/motion_planners/curobo/curobo_planner.py
+@@ -245,6 +245,7 @@ class CuroboPlanner(MotionPlannerBase):
+             world_cfg,
+             tensor_args=self.tensor_args,
+             collision_checker_type=self.config.collision_checker_type,
++            use_cuda_graph=self.config.use_cuda_graph,
+             num_trajopt_seeds=self.config.num_trajopt_seeds,
+             num_graph_seeds=self.config.num_graph_seeds,
+             interpolation_dt=self.config.interpolation_dt,
+@@ -285,8 +286,15 @@ class CuroboPlanner(MotionPlannerBase):
+         self.sphere_update_freq: int = self.config.sphere_update_freq
+ 
+         # Warm up planner
+-        self.logger.info("Warming up motion planner...")
+-        self.motion_gen.warmup(enable_graph=True, warmup_js_trajopt=False)
++        if self.config.warmup:
++            self.logger.info("Warming up motion planner...")
++            # Keep warm-up behavior consistent with the planner configuration.
++            # The previous hard-coded graph warm-up ignored ``enable_graph=False``
++            # and forced graph construction for primitive-only planners.
++            self.motion_gen.warmup(
++                enable_graph=self.config.enable_graph,
++                warmup_js_trajopt=False,
++            )
+ 
+         # Read static world geometry once
+         self._initialize_static_world()
+diff --git a/source/isaaclab_mimic/isaaclab_mimic/motion_planners/curobo/curobo_planner_cfg.py b/source/isaaclab_mimic/isaaclab_mimic/motion_planners/curobo/curobo_planner_cfg.py
+index b3b3f7cce..52304d82b 100644
+--- a/source/isaaclab_mimic/isaaclab_mimic/motion_planners/curobo/curobo_planner_cfg.py
++++ b/source/isaaclab_mimic/isaaclab_mimic/motion_planners/curobo/curobo_planner_cfg.py
+@@ -86,6 +86,12 @@ class CuroboPlannerCfg:
+     collision_checker_type: CollisionCheckerType = CollisionCheckerType.MESH
+     """Type of collision checker to use."""
+ 
++    use_cuda_graph: bool = True
++    """Record cuRobo solver operations as CUDA graphs."""
++
++    warmup: bool = True
++    """Run cuRobo warm-up during planner construction."""
++
+     num_trajopt_seeds: int = 12
+     """Number of seeds for trajectory optimization."""
+ 

@@ -1,0 +1,1985 @@
+# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
+import copy
+from abc import ABC
+from typing import TYPE_CHECKING, Any
+
+import isaaclab.sim as sim_utils
+
+if TYPE_CHECKING:
+    from isaaclab_arena.assets.hdr_image import HDRImage
+
+from isaaclab.assets import RigidObjectCfg
+from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+
+from isaaclab_arena.affordances.openable import Openable
+from isaaclab_arena.affordances.placeable import Placeable
+from isaaclab_arena.affordances.pressable import Pressable
+from isaaclab_arena.affordances.turnable import Turnable
+from isaaclab_arena.assets.lightwheel_lazy import LightwheelLazyPath
+from isaaclab_arena.assets.nucleus import ARENA_NUCLEUS_DIR
+from isaaclab_arena.assets.object import Object
+from isaaclab_arena.assets.object_base import ObjectType
+from isaaclab_arena.assets.object_utils import (
+    EMPTY_ARTICULATION_INIT_STATE_CFG,
+    RIGID_BODY_PROPS_HIGH_PRECISION,
+    RIGID_BODY_PROPS_MEDIUM_PRECISION,
+)
+from isaaclab_arena.assets.register import register_asset
+from isaaclab_arena.utils.pose import Pose
+
+
+class LibraryObject(Object):
+    """
+    Base class for objects in the library which are defined in this file.
+    These objects have class attributes (rather than instance attributes).
+    """
+
+    name: str
+    tags: list[str]
+    usd_path: str | None = None
+    object_type: ObjectType = ObjectType.RIGID
+    scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    spawn_cfg_addon: dict[str, Any] = {}
+    asset_cfg_addon: dict[str, Any] = {}
+
+    def __init__(
+        self,
+        instance_name: str | None = None,
+        prim_path: str | None = None,
+        initial_pose: Pose | None = None,
+        scale: tuple[float, float, float] | None = None,
+        **kwargs,
+    ):
+        name = instance_name if instance_name is not None else self.name
+        scale = scale if scale is not None else self.scale
+        super().__init__(
+            name=name,
+            prim_path=prim_path,
+            tags=self.tags,
+            usd_path=self.usd_path,
+            object_type=self.object_type,
+            scale=scale,
+            initial_pose=initial_pose,
+            spawn_cfg_addon=self.spawn_cfg_addon,
+            asset_cfg_addon=self.asset_cfg_addon,
+            **kwargs,
+        )
+
+
+@register_asset
+class CrackerBox(LibraryObject):
+    """
+    Encapsulates the pick-up object config for a pick-and-place environment.
+    """
+
+    name = "cracker_box"
+    tags = ["object"]
+    usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/003_cracker_box.usd"
+
+
+@register_asset
+class MustardBottle(LibraryObject):
+    """
+    Encapsulates the pick-up object config for a pick-and-place environment.
+    """
+
+    name = "mustard_bottle"
+    tags = ["object"]
+    usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/006_mustard_bottle.usd"
+
+
+@register_asset
+class SugarBox(LibraryObject):
+    """
+    Encapsulates the pick-up object config for a pick-and-place environment.
+    """
+
+    name = "sugar_box"
+    tags = ["object"]
+    usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/004_sugar_box.usd"
+
+
+@register_asset
+class TomatoSoupCan(LibraryObject):
+    """
+    Encapsulates the pick-up object config for a pick-and-place environment.
+    """
+
+    name = "tomato_soup_can"
+    tags = ["object"]
+    usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/005_tomato_soup_can.usd"
+
+
+@register_asset
+class PowerDrill(LibraryObject):
+    """
+    Encapsulates the pick-up object config for a pick-and-place environment.
+    """
+
+    name = "power_drill"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/power_drill_physics/power_drill_physics.usd"
+
+
+@register_asset
+class Microwave(LibraryObject, Openable):
+    """A microwave oven."""
+
+    name = "microwave"
+    tags = ["object", "openable"]
+    # Resolved lazily on first attribute access — see isaaclab_arena.assets.lightwheel_lazy.
+    usd_path = LightwheelLazyPath(registry_type="fixtures", file_name="Microwave039", file_type="USD")
+    object_type = ObjectType.ARTICULATION
+
+    # Openable affordance parameters
+    openable_joint_name = "microjoint"
+    openable_threshold = 0.5  # Bistate threshold (open > threshold, closed <= threshold)
+
+    def __init__(
+        self, instance_name: str | None = None, prim_path: str | None = None, initial_pose: Pose | None = None
+    ):
+        super().__init__(
+            instance_name=instance_name,
+            prim_path=prim_path,
+            initial_pose=initial_pose,
+            openable_joint_name=self.openable_joint_name,
+            openable_threshold=self.openable_threshold,
+        )
+
+
+@register_asset
+class CoffeeMachine(LibraryObject, Pressable):
+    """
+    Encapsulates the pick-up object config for a pick-and-place environment.
+    """
+
+    name = "coffee_machine"
+    tags = ["object", "pressable"]
+    usd_path = LightwheelLazyPath(registry_type="fixtures", file_name="CoffeeMachine108", file_type="USD")
+    object_type = ObjectType.ARTICULATION
+
+    # Openable affordance parameters
+    pressable_joint_name = "CoffeeMachine108_Button002_joint"
+    pressedness_threshold = 0.5
+
+    def __init__(
+        self, instance_name: str | None = None, prim_path: str | None = None, initial_pose: Pose | None = None
+    ):
+        super().__init__(
+            instance_name=instance_name,
+            prim_path=prim_path,
+            initial_pose=initial_pose,
+            pressable_joint_name=self.pressable_joint_name,
+            pressedness_threshold=self.pressedness_threshold,
+        )
+
+
+@register_asset
+class StandMixer(LibraryObject, Turnable):
+    """
+    Stand mixer with a knob that can be turned to different levels.
+    """
+
+    name = "stand_mixer"
+    tags = ["object", "turnable"]
+
+    # TODO(xinjieyao, 2026.01.07): Trigger sync to production bucket for release.
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/lightwheel_StandMixer013/StandMixer013.usd"
+    object_type = ObjectType.ARTICULATION
+
+    # knob turnable affordance parameters
+    turnable_joint_name = "knob_speed_joint"
+    min_level_angle_deg = 40.0
+    max_level_angle_deg = 280.0
+    num_levels = 7
+
+    def __init__(
+        self, instance_name: str | None = None, prim_path: str | None = None, initial_pose: Pose | None = None
+    ):
+        super().__init__(
+            instance_name=instance_name,
+            prim_path=prim_path,
+            initial_pose=initial_pose,
+            turnable_joint_name=self.turnable_joint_name,
+            min_level_angle_deg=self.min_level_angle_deg,
+            max_level_angle_deg=self.max_level_angle_deg,
+            num_levels=self.num_levels,
+        )
+
+
+@register_asset
+class OfficeTable(LibraryObject):
+    """
+    A basic office table.
+    """
+
+    name = "office_table"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Mimic/nut_pour_task/nut_pour_assets/table.usd"
+    scale = (1.0, 1.0, 0.7)
+
+
+@register_asset
+class BlueSortingBin(LibraryObject):
+    """
+    A blue plastic sorting bin.
+    """
+
+    name = "blue_sorting_bin"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Mimic/exhaust_pipe_task/exhaust_pipe_assets/blue_sorting_bin.usd"
+    scale = (4.0, 2.0, 1.0)
+
+
+@register_asset
+class BlueExhaustPipe(LibraryObject):
+    """
+    A blue exhaust pipe.
+    """
+
+    name = "blue_exhaust_pipe"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Mimic/exhaust_pipe_task/exhaust_pipe_assets/blue_exhaust_pipe.usd"
+    scale = (0.55, 0.55, 1.4)
+
+
+@register_asset
+class BrownBox(LibraryObject):
+    """
+    A brown box.
+    """
+
+    name = "brown_box"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/brown_box/brown_box.usd"
+    scale = (1.0, 1.0, 1.0)
+
+
+@register_asset
+class Mug(LibraryObject, Placeable):
+    """
+    A mug.
+    """
+
+    name = "mug"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Objects/Mug/mug.usd"
+    scale = (1.0, 1.0, 1.0)
+
+    # Placeable affordance parameters
+    upright_axis_name = "z"
+    orientation_threshold = 0.5
+
+    def __init__(
+        self,
+        instance_name: str | None = None,
+        prim_path: str | None = None,
+        initial_pose: Pose | None = None,
+        scale: tuple[float, float, float] | None = None,
+    ):
+        super().__init__(
+            instance_name=instance_name,
+            prim_path=prim_path,
+            initial_pose=initial_pose,
+            scale=scale,
+            upright_axis_name=self.upright_axis_name,
+            orientation_threshold=self.orientation_threshold,
+        )
+        RIGID_BODY_PROPS = sim_utils.RigidBodyPropertiesCfg(
+            solver_position_iteration_count=16,
+            solver_velocity_iteration_count=1,
+            max_angular_velocity=1000.0,
+            max_linear_velocity=1000.0,
+            max_depenetration_velocity=5.0,
+            disable_gravity=False,
+        )
+        self.object_cfg.spawn.rigid_props = RIGID_BODY_PROPS
+        self.object_cfg.spawn.mass_props = sim_utils.MassPropertiesCfg(mass=0.25)
+
+
+@register_asset
+class GroundPlane(LibraryObject):
+    """
+    A ground plane.
+    """
+
+    name = "ground_plane"
+    tags = ["ground_plane"]
+    # Setting a global prim path for the ground plane. Will not get repeated for each environment.
+    default_prim_path = "/World/GroundPlane"
+    object_type = ObjectType.BASE
+    default_spawner_cfg = GroundPlaneCfg()
+
+    def __init__(
+        self,
+        instance_name: str | None = None,
+        prim_path: str | None = default_prim_path,
+        initial_pose: Pose | None = None,
+        spawner_cfg: sim_utils.GroundPlaneCfg = default_spawner_cfg,
+    ):
+        super().__init__(
+            instance_name=instance_name, prim_path=prim_path, initial_pose=initial_pose, spawner_cfg=spawner_cfg
+        )
+
+
+@register_asset
+class Sphere(LibraryObject):
+    """
+    A sphere with rigid body physics (dynamic by default).
+    """
+
+    name = "sphere"
+    tags = ["object"]
+    scale = (1.0, 1.0, 1.0)
+    default_spawner_cfg = sim_utils.SphereCfg(
+        radius=0.1,
+        visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.8, 0.2, 0.2)),
+        collision_props=sim_utils.CollisionPropertiesCfg(),
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            solver_position_iteration_count=16,
+            solver_velocity_iteration_count=1,
+            max_angular_velocity=1000.0,
+            max_linear_velocity=1000.0,
+            max_depenetration_velocity=5.0,
+            disable_gravity=False,
+        ),
+        mass_props=sim_utils.MassPropertiesCfg(mass=0.25),
+    )
+
+    def __init__(
+        self,
+        instance_name: str | None = None,
+        prim_path: str | None = None,
+        initial_pose: Pose | None = None,
+        scale: tuple[float, float, float] | None = None,
+        spawner_cfg: sim_utils.SphereCfg = default_spawner_cfg,
+    ):
+        super().__init__(
+            instance_name=instance_name,
+            prim_path=prim_path,
+            initial_pose=initial_pose,
+            scale=scale,
+            spawner_cfg=spawner_cfg,
+        )
+
+
+class LightBase(LibraryObject, ABC):
+    """Abstract base for spawnable lights.
+
+    Concrete subclasses set default_spawner_cfg to an Isaac Lab light cfg.
+    """
+
+    object_type = ObjectType.BASE
+    tags = ["light"]
+
+    default_intensity: float
+    """Intensity the light is lit at by default, and the intensity ``on()`` restores."""
+
+    def __init__(self, *args, spawner_cfg: sim_utils.LightCfg, **kwargs):
+        # Deep-copy here to avoid altering the shared class default.
+        super().__init__(*args, spawner_cfg=copy.deepcopy(spawner_cfg), **kwargs)
+
+    def on(self, intensity: float | None = None) -> None:
+        """Turn the light on, at ``intensity`` if given, else at the class default intensity."""
+        self.set_intensity(intensity if intensity is not None else self.default_intensity)
+
+    def off(self) -> None:
+        """Turn the light off (intensity 0)."""
+        self.set_intensity(0.0)
+
+    def set_intensity(self, intensity: float) -> None:
+        """Set the light's intensity."""
+        assert intensity >= 0.0, f"Light intensity must be non-negative, got {intensity}."
+        self.spawner_cfg.intensity = intensity
+        self.object_cfg = self._init_object_cfg()
+
+    def set_color(self, color: tuple[float, float, float]) -> None:
+        """Set the light's RGB color, with each channel in [0, 1]."""
+        assert len(color) == 3, f"Light color must be an (r, g, b) triple, got {color}."
+        assert all(0.0 <= c <= 1.0 for c in color), f"Light color channels must be in [0, 1], got {color}."
+        self.spawner_cfg.color = tuple(color)
+        self.object_cfg = self._init_object_cfg()
+
+    def set_color_temperature(self, color_temperature: float) -> None:
+        """Enable and set the light's white-point color temperature in Kelvin.
+
+        The range is limited to [1000, 10000] K, the valid range documented by Isaac Lab's light cfg.
+        """
+        assert (
+            1000.0 <= color_temperature <= 10000.0
+        ), f"Light color temperature must be in [1000, 10000] K, got {color_temperature}."
+        self.spawner_cfg.enable_color_temperature = True
+        self.spawner_cfg.color_temperature = color_temperature
+        self.object_cfg = self._init_object_cfg()
+
+
+@register_asset
+class DomeLight(LightBase):
+    """A dome light, optionally textured with an HDR image environment map.
+
+    The light can be used plain (uniform color) or combined with an HDR image
+    texture via :meth:`add_hdr`::
+
+        hdr = hdr_registry.get_hdr_by_name("home_office_robolab")()
+        dome_light = asset_registry.get_asset_by_name("light")()
+        dome_light.add_hdr(hdr)
+
+    You can also pass the HDRImage instance directly to the constructor::
+
+        hdr = hdr_registry.get_hdr_by_name("home_office_robolab")()
+        dome_light = asset_registry.get_asset_by_name("light")(hdr=hdr)
+    """
+
+    name = "light"
+    # Setting a global prim path for the dome light. Will not get repeated for each environment.
+    default_prim_path = "/World/Light"
+    default_intensity = 1500.0
+    default_spawner_cfg = sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=default_intensity)
+
+    spawner_cfg: sim_utils.DomeLightCfg
+    """Narrows the base-class spawner cfg type to ``DomeLightCfg`` for this asset."""
+
+    def __init__(
+        self,
+        instance_name: str | None = None,
+        prim_path: str | None = default_prim_path,
+        initial_pose: Pose | None = None,
+        spawner_cfg: sim_utils.DomeLightCfg = default_spawner_cfg,
+        hdr: "HDRImage | None" = None,  # noqa: F821
+    ):
+        from isaaclab_arena.variations.hdr_image_variation import HDRImageVariation
+        from isaaclab_arena.variations.light_color_temperature_variation import LightColorTemperatureVariation
+        from isaaclab_arena.variations.light_color_variation import LightColorVariation
+        from isaaclab_arena.variations.light_intensity_variation import LightIntensityVariation
+
+        super().__init__(
+            instance_name=instance_name, prim_path=prim_path, initial_pose=initial_pose, spawner_cfg=spawner_cfg
+        )
+        if hdr is not None:
+            self.add_hdr(hdr)
+        self.add_variation(HDRImageVariation(self))
+        self.add_variation(LightIntensityVariation(self))
+        self.add_variation(LightColorVariation(self))
+        self.add_variation(LightColorTemperatureVariation(self))
+
+    def add_hdr(self, hdr: "HDRImage") -> None:  # noqa: F821
+        """Attach an HDR environment map texture to this dome light.
+
+        Args:
+            hdr: An :class:`HDRImage` instance.
+        """
+        from isaaclab_arena.assets.hdr_image import HDRImage
+
+        assert isinstance(hdr, HDRImage), f"Expected an HDRImage instance, got {type(hdr)}"
+        # Apply the HDR texture in place, preserving user-specified intensity, color, etc.
+        self.spawner_cfg.texture_file = hdr.texture_file
+        self.spawner_cfg.texture_format = hdr.texture_format  # type: ignore[assignment]
+        self.spawner_cfg.visible_in_primary_ray = True
+        self.object_cfg = self._init_object_cfg()
+
+
+@register_asset
+class DirectionalLight(LightBase):
+    """A distant (directional) light, emulating a far-away source such as the sun.
+
+    The light emits parallel rays along its local -Z axis.
+    """
+
+    name = "directional_light"
+    default_prim_path = "/World/DirectionalLight"
+    default_intensity = 1000.0
+    default_spawner_cfg = sim_utils.DistantLightCfg(intensity=default_intensity)
+    default_initial_pose = Pose(position_xyz=(0.0, 0.0, 5.0), rotation_xyzw=(0.0, 0.0, 0.0, 1.0))
+
+    spawner_cfg: sim_utils.DistantLightCfg
+
+    def __init__(
+        self,
+        instance_name: str | None = None,
+        prim_path: str | None = default_prim_path,
+        initial_pose: Pose | None = None,
+        spawner_cfg: sim_utils.DistantLightCfg = default_spawner_cfg,
+    ):
+        from isaaclab_arena.variations.light_color_temperature_variation import LightColorTemperatureVariation
+        from isaaclab_arena.variations.light_color_variation import LightColorVariation
+        from isaaclab_arena.variations.light_direction_variation import LightDirectionVariation
+        from isaaclab_arena.variations.light_intensity_variation import LightIntensityVariation
+
+        super().__init__(
+            instance_name=instance_name,
+            prim_path=prim_path,
+            initial_pose=initial_pose if initial_pose is not None else self.default_initial_pose,
+            spawner_cfg=spawner_cfg,
+        )
+        self.add_variation(LightDirectionVariation(self))
+        self.add_variation(LightIntensityVariation(self))
+        self.add_variation(LightColorVariation(self))
+        self.add_variation(LightColorTemperatureVariation(self))
+
+    def set_orientation(self, rotation_xyzw: tuple[float, float, float, float]) -> None:
+        """Set the light's orientation."""
+        position_xyz = self.initial_pose.position_xyz if self.initial_pose is not None else (0.0, 0.0, 0.0)
+        self.initial_pose = Pose(position_xyz=position_xyz, rotation_xyzw=tuple(rotation_xyzw))
+        self.object_cfg = self._init_object_cfg()
+
+    def set_dome_light(self, dome_light: LightBase) -> None:
+        """Register a dome light for the direction variation to dim when it activates."""
+        self.get_variation("direction").set_dome_light(dome_light)
+
+
+@register_asset
+class DexCube(LibraryObject):
+    """
+    A cube.
+    """
+
+    name = "dex_cube"
+    tags = ["object"]
+    usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/DexCube/dex_cube_instanceable.usd"
+    scale = (0.8, 0.8, 0.8)
+
+
+@register_asset
+class Peg(LibraryObject):
+    """
+    A peg.
+    """
+
+    name = "peg"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Factory/factory_peg_8mm.usd"
+    object_type = ObjectType.ARTICULATION
+    scale = (3.0, 3.0, 3.0)
+    spawn_cfg_addon = {
+        "rigid_props": RIGID_BODY_PROPS_HIGH_PRECISION,
+        "mass_props": sim_utils.MassPropertiesCfg(mass=0.019),
+        "collision_props": sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
+    }
+    asset_cfg_addon = {
+        "init_state": EMPTY_ARTICULATION_INIT_STATE_CFG,
+    }
+
+
+@register_asset
+class Hole(LibraryObject):
+    """
+    A hole.
+    """
+
+    name = "hole"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Factory/factory_hole_8mm.usd"
+    object_type = ObjectType.ARTICULATION
+    scale = (3.0, 3.0, 3.0)
+    spawn_cfg_addon = {
+        "rigid_props": RIGID_BODY_PROPS_HIGH_PRECISION,
+        "mass_props": sim_utils.MassPropertiesCfg(mass=0.05),
+        "collision_props": sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
+    }
+    asset_cfg_addon = {
+        "init_state": EMPTY_ARTICULATION_INIT_STATE_CFG,
+    }
+
+
+@register_asset
+class SmallGear(LibraryObject):
+    """
+    A small gear.
+    """
+
+    name = "small_gear"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Factory/factory_gear_small.usd"
+    object_type = ObjectType.ARTICULATION
+    scale = (2.0, 2.0, 2.0)
+    spawn_cfg_addon = {
+        "rigid_props": RIGID_BODY_PROPS_MEDIUM_PRECISION,
+        "mass_props": sim_utils.MassPropertiesCfg(mass=0.019),
+        "collision_props": sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
+    }
+    asset_cfg_addon = {
+        "init_state": EMPTY_ARTICULATION_INIT_STATE_CFG,
+    }
+
+
+@register_asset
+class LargeGear(LibraryObject):
+    """
+    A large gear.
+    """
+
+    name = "large_gear"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Factory/factory_gear_large.usd"
+    object_type = ObjectType.ARTICULATION
+    scale = (2.0, 2.0, 2.0)
+    spawn_cfg_addon = {
+        "rigid_props": RIGID_BODY_PROPS_MEDIUM_PRECISION,
+        "mass_props": sim_utils.MassPropertiesCfg(mass=0.019),
+        "collision_props": sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
+    }
+    asset_cfg_addon = {
+        "init_state": EMPTY_ARTICULATION_INIT_STATE_CFG,
+    }
+
+
+@register_asset
+class GearBase(LibraryObject):
+    """
+    Gear base.
+    """
+
+    name = "gear_base"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Factory/factory_gear_base.usd"
+    object_type = ObjectType.ARTICULATION
+    scale = (2.0, 2.0, 2.0)
+    spawn_cfg_addon = {
+        "rigid_props": RIGID_BODY_PROPS_MEDIUM_PRECISION,
+        "mass_props": sim_utils.MassPropertiesCfg(mass=0.05),
+        "collision_props": sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
+    }
+    asset_cfg_addon = {
+        "init_state": EMPTY_ARTICULATION_INIT_STATE_CFG,
+    }
+
+
+@register_asset
+class MediumGear(LibraryObject):
+    """
+    A medium gear.
+    """
+
+    name = "medium_gear"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Factory/factory_gear_medium.usd"
+    object_type = ObjectType.ARTICULATION
+    scale = (2.0, 2.0, 2.0)
+    spawn_cfg_addon = {
+        "rigid_props": RIGID_BODY_PROPS_MEDIUM_PRECISION,
+        "mass_props": sim_utils.MassPropertiesCfg(mass=0.019),
+        "collision_props": sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
+    }
+    asset_cfg_addon = {
+        "init_state": EMPTY_ARTICULATION_INIT_STATE_CFG,
+    }
+
+
+@register_asset
+class Broccoli(LibraryObject):
+    """
+    Brocolli
+    """
+
+    name = "broccoli"
+    tags = ["object", "vegetable", "graspable"]
+    usd_path = LightwheelLazyPath(registry_type="objects", registry_name=["broccoli"], file_type="USD")
+
+
+@register_asset
+class SweetPotato(LibraryObject):
+    """
+    SweetPotato
+    """
+
+    name = "sweet_potato"
+    tags = ["object", "vegetable", "graspable"]
+    usd_path = LightwheelLazyPath(registry_type="objects", file_name="SweetPotato005", file_type="USD")
+    scale = (1.5, 1.5, 1.5)
+
+
+@register_asset
+class Jug(LibraryObject):
+    """
+    Jug
+    """
+
+    name = "jug"
+    tags = ["object", "graspable"]
+    usd_path = LightwheelLazyPath(registry_type="objects", file_name="Jug005", file_type="USD")
+    scale = (2.0, 2.0, 2.0)
+
+
+@register_asset
+class BeerBottle(LibraryObject):
+    """
+    Beer Bottle
+    """
+
+    name = "beer_bottle"
+    tags = ["object", "graspable"]
+    usd_path = LightwheelLazyPath(registry_type="objects", file_name="beer016", file_type="USD")
+    scale = (1.2, 1.2, 1.2)
+
+
+@register_asset
+class RedCube(LibraryObject):
+    """
+    A red cube.
+    """
+
+    name = "red_cube"
+    tags = ["object"]
+
+    usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/red_block.usd"
+
+    scale = (0.02, 0.02, 0.02)
+
+
+@register_asset
+class GreenCube(LibraryObject):
+    """
+    A green cube.
+    """
+
+    name = "green_cube"
+    tags = ["object"]
+
+    usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/green_block.usd"
+    scale = (0.02, 0.02, 0.02)
+
+
+@register_asset
+class RedContainer(LibraryObject):
+    """
+    A red container.
+    """
+
+    name = "red_container"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/isaac_container/container_h20_red.usd"
+    scale = (0.5, 0.5, 0.5)
+
+
+@register_asset
+class GreenContainer(LibraryObject):
+    """
+    A green container.
+    """
+
+    name = "green_container"
+    tags = ["object"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/isaac_container/container_h20_green.usd"
+    scale = (0.5, 0.5, 0.5)
+
+
+@register_asset
+class PurpleCrate(LibraryObject):
+    """A purple KLT container."""
+
+    name = "purple_crate"
+    tags = ["object", "container"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/KLT_Bin/small_KLT.usd"
+
+
+@register_asset
+class BlueBlockBasicRobolab(LibraryObject):
+    # TODO(cvolk): pick_and_place success termination does not consistently trigger
+    # with this asset even when the block is placed in the destination.
+    name = "blue_block_basic_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/basic/blue_block.usd"
+
+
+@register_asset
+class GreenBlockBasicRobolab(LibraryObject):
+    name = "green_block_basic_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/basic/green_block.usd"
+
+
+@register_asset
+class RedBlockBasicRobolab(LibraryObject):
+    name = "red_block_basic_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/basic/red_block.usd"
+
+
+@register_asset
+class YellowBlockBasicRobolab(LibraryObject):
+    name = "yellow_block_basic_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/basic/yellow_block.usd"
+
+
+@register_asset
+class Avocado01FruitsVeggiesRobolab(LibraryObject):
+    name = "avocado01_fruits_veggies_robolab"
+    tags = ["object", "graspable", "food", "fruit", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/fruits_veggies/avocado01.usd"
+    )
+
+
+@register_asset
+class Lemon01FruitsVeggiesRobolab(LibraryObject):
+    name = "lemon_01_fruits_veggies_robolab"
+    tags = ["object", "graspable", "food", "fruit", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/fruits_veggies/lemon_01.usd"
+
+
+@register_asset
+class Lemon02FruitsVeggiesRobolab(LibraryObject):
+    name = "lemon_02_fruits_veggies_robolab"
+    tags = ["object", "graspable", "food", "fruit", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/fruits_veggies/lemon_02.usd"
+
+
+@register_asset
+class Lime01FruitsVeggiesRobolab(LibraryObject):
+    name = "lime01_fruits_veggies_robolab"
+    tags = ["object", "graspable", "food", "fruit", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/fruits_veggies/lime01.usd"
+
+
+@register_asset
+class Lychee01FruitsVeggiesRobolab(LibraryObject):
+    name = "lychee01_fruits_veggies_robolab"
+    tags = ["object", "graspable", "food", "fruit", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/fruits_veggies/lychee01.usd"
+
+
+@register_asset
+class Orange01FruitsVeggiesRobolab(LibraryObject):
+    name = "orange_01_fruits_veggies_robolab"
+    tags = ["object", "graspable", "food", "fruit", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/fruits_veggies/orange_01.usd"
+    )
+
+
+@register_asset
+class Orange02FruitsVeggiesRobolab(LibraryObject):
+    name = "orange_02_fruits_veggies_robolab"
+    tags = ["object", "graspable", "food", "fruit", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/fruits_veggies/orange_02.usd"
+    )
+
+
+@register_asset
+class Pomegranate01FruitsVeggiesRobolab(LibraryObject):
+    name = "pomegranate01_fruits_veggies_robolab"
+    tags = ["object", "graspable", "food", "fruit", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/fruits_veggies/pomegranate01.usd"
+    )
+
+
+@register_asset
+class RedOnionFruitsVeggiesRobolab(LibraryObject):
+    name = "red_onion_fruits_veggies_robolab"
+    tags = ["object", "graspable", "food", "fruit", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/fruits_veggies/red_onion.usd"
+    )
+
+
+@register_asset
+class HammerHandalRobolab(LibraryObject):
+    name = "hammer_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/hammer.usd"
+
+
+@register_asset
+class BlackHammerRobolab(LibraryObject):
+    name = "black_hammer_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/hammer_1.usd"
+
+
+@register_asset
+class WoodHammerRobolab(LibraryObject):
+    name = "wood_hammer_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/hammer_2.usd"
+
+
+@register_asset
+class RedHammerRobolab(LibraryObject):
+    name = "red_hammer_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/hammer_3.usd"
+
+
+@register_asset
+class Hammer4HandalRobolab(LibraryObject):
+    name = "hammer_4_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/hammer_4.usd"
+
+
+@register_asset
+class Hammer5HandalRobolab(LibraryObject):
+    name = "hammer_5_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/hammer_5.usd"
+
+
+@register_asset
+class BlueHammerRobolab(LibraryObject):
+    name = "blue_hammer_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/hammer_6.usd"
+
+
+@register_asset
+class Hammer7HandalRobolab(LibraryObject):
+    name = "hammer_7_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/hammer_7.usd"
+
+
+@register_asset
+class Hammer8HandalRobolab(LibraryObject):
+    name = "hammer_8_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/hammer_8.usd"
+
+
+@register_asset
+class LadleHandalRobolab(LibraryObject):
+    name = "ladle_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/ladle.usd"
+
+
+@register_asset
+class MeasuringCupsHandalRobolab(LibraryObject):
+    name = "measuring_cups_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/measuring_cups.usd"
+
+
+@register_asset
+class MeasuringCups1HandalRobolab(LibraryObject):
+    name = "measuring_cups_1_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/measuring_cups_1.usd"
+
+
+@register_asset
+class MeasuringSpoonHandalRobolab(LibraryObject):
+    name = "measuring_spoon_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/measuring_spoon.usd"
+
+
+@register_asset
+class SaladTongsHandalRobolab(LibraryObject):
+    name = "salad_tongs_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/salad_tongs.usd"
+
+
+@register_asset
+class ServingSpoonHandalRobolab(LibraryObject):
+    name = "serving_spoon_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/serving_spoon.usd"
+
+
+@register_asset
+class ServingSpoonsHandalRobolab(LibraryObject):
+    name = "serving_spoons_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/serving_spoons.usd"
+
+
+@register_asset
+class SpoonHandalRobolab(LibraryObject):
+    name = "spoon_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/spoon.usd"
+
+
+@register_asset
+class Spoon1HandalRobolab(LibraryObject):
+    name = "spoon_1_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/spoon_1.usd"
+
+
+@register_asset
+class Spoon2HandalRobolab(LibraryObject):
+    name = "spoon_2_handal_robolab"
+    tags = ["object", "graspable", "tool", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/handal/spoon_2.usd"
+
+
+@register_asset
+class AlphabetSoupCanHopeRobolab(LibraryObject):
+    name = "alphabet_soup_can_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/alphabet_soup_can.usd"
+
+
+@register_asset
+class BbqSauceBottleHopeRobolab(LibraryObject):
+    name = "bbq_sauce_bottle_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/bbq_sauce_bottle.usd"
+    scale = (0.9, 0.9, 1.4)
+
+
+@register_asset
+class ButterHopeRobolab(LibraryObject):
+    name = "butter_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/butter.usd"
+    scale = (2.2, 2.0, 1.8)
+
+
+@register_asset
+class CannedMushroomsHopeRobolab(LibraryObject):
+    name = "canned_mushrooms_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/canned_mushrooms.usd"
+
+
+@register_asset
+class CannedPeachesHopeRobolab(LibraryObject):
+    name = "canned_peaches_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/canned_peaches.usd"
+
+
+@register_asset
+class CannedTunaHopeRobolab(LibraryObject):
+    name = "canned_tuna_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/canned_tuna.usd"
+
+
+@register_asset
+class ChocolatePuddingMixHopeRobolab(LibraryObject):
+    name = "chocolate_pudding_mix_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/chocolate_pudding_mix.usd"
+    )
+
+
+@register_asset
+class CornCanHopeRobolab(LibraryObject):
+    name = "corn_can_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/corn_can.usd"
+
+
+@register_asset
+class CreamCheeseHopeRobolab(LibraryObject):
+    name = "cream_cheese_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/cream_cheese.usd"
+
+
+@register_asset
+class GranolaBarsHopeRobolab(LibraryObject):
+    name = "granola_bars_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/granola_bars.usd"
+
+
+@register_asset
+class GreenBeansCanHopeRobolab(LibraryObject):
+    name = "green_beans_can_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/green_beans_can.usd"
+
+
+@register_asset
+class KetchupBottleHopeRobolab(LibraryObject):
+    name = "ketchup_bottle_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/ketchup_bottle.usd"
+    scale = (0.8, 0.8, 1.2)
+
+
+@register_asset
+class MacaroniAndCheeseHopeRobolab(LibraryObject):
+    name = "macaroni_and_cheese_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/macaroni_and_cheese.usd"
+    )
+
+
+@register_asset
+class MayonnaiseBottleHopeRobolab(LibraryObject):
+    name = "mayonnaise_bottle_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/mayonnaise_bottle.usd"
+    scale = (0.9, 0.9, 1.2)
+
+
+@register_asset
+class MilkCartonHopeRobolab(LibraryObject):
+    name = "milk_carton_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/milk_carton.usd"
+
+
+@register_asset
+class MustardBottleHopeRobolab(LibraryObject):
+    name = "mustard_bottle_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/mustard_bottle.usd"
+
+
+@register_asset
+class OatmealRaisinCookiesHopeRobolab(LibraryObject):
+    name = "oatmeal_raisin_cookies_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/oatmeal_raisin_cookies.usd"
+    )
+
+
+@register_asset
+class OrangeJuiceCartonHopeRobolab(LibraryObject):
+    name = "orange_juice_carton_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/orange_juice_carton.usd"
+    )
+
+
+@register_asset
+class ParmesanCheeseCanisterHopeRobolab(LibraryObject):
+    name = "parmesan_cheese_canister_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/parmesan_cheese_canister.usd"
+    )
+
+
+@register_asset
+class PeasAndCarrotsHopeRobolab(LibraryObject):
+    name = "peas_and_carrots_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/peas_and_carrots.usd"
+
+
+@register_asset
+class PineappleSlicesCanHopeRobolab(LibraryObject):
+    name = "pineapple_slices_can_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/pineapple_slices_can.usd"
+    )
+
+
+@register_asset
+class PittedCherriesHopeRobolab(LibraryObject):
+    name = "pitted_cherries_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/pitted_cherries.usd"
+
+
+@register_asset
+class PopcornBoxHopeRobolab(LibraryObject):
+    name = "popcorn_box_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/popcorn_box.usd"
+
+
+@register_asset
+class RaisinBoxHopeRobolab(LibraryObject):
+    name = "raisin_box_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/raisin_box.usd"
+
+
+@register_asset
+class RanchDressingHopeRobolab(LibraryObject):
+    name = "ranch_dressing_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/ranch_dressing.usd"
+    scale = (0.8, 0.8, 1.2)
+
+
+@register_asset
+class SpaghettiHopeRobolab(LibraryObject):
+    name = "spaghetti_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/spaghetti.usd"
+
+
+@register_asset
+class TomatoSauceCanHopeRobolab(LibraryObject):
+    name = "tomato_sauce_can_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/tomato_sauce_can.usd"
+
+
+@register_asset
+class YogurtCupHopeRobolab(LibraryObject):
+    name = "yogurt_cup_hope_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hope/yogurt_cup.usd"
+
+
+@register_asset
+class BbqSauceBottleHot3DRobolab(LibraryObject):
+    name = "bbq_sauce_bottle_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/bbq_sauce_bottle.usd"
+
+
+@register_asset
+class BirdhouseHot3DRobolab(LibraryObject):
+    name = "birdhouse_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/birdhouse.usd"
+
+
+@register_asset
+class CeramicMugHot3DRobolab(LibraryObject):
+    name = "ceramic_mug_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/ceramic_mug.usd"
+
+
+@register_asset
+class ClayPlatesHot3DRobolab(LibraryObject):
+    name = "clay_plates_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/clay_plates.usd"
+
+
+@register_asset
+class CoffeePotHot3DRobolab(LibraryObject):
+    name = "coffee_pot_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/coffee_pot.usd"
+
+
+@register_asset
+class ComputerMouseHot3DRobolab(LibraryObject):
+    name = "computer_mouse_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/computer_mouse.usd"
+
+
+@register_asset
+class DumbbellHot3DRobolab(LibraryObject):
+    name = "dumbbell_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/dumbbell.usd"
+
+
+@register_asset
+class FoamRollerHot3DRobolab(LibraryObject):
+    name = "foam_roller_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/foam_roller.usd"
+
+
+@register_asset
+class FrozenVegetableBlockHot3DRobolab(LibraryObject):
+    name = "frozen_vegetable_block_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/frozen_vegetable_block.usd"
+    )
+
+
+@register_asset
+class FrozenWafflesHot3DRobolab(LibraryObject):
+    name = "frozen_waffles_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/frozen_waffles.usd"
+
+
+@register_asset
+class GlassesHot3DRobolab(LibraryObject):
+    name = "glasses_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/glasses.usd"
+
+
+@register_asset
+class KeyboardHot3DRobolab(LibraryObject):
+    name = "keyboard_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/keyboard.usd"
+
+
+@register_asset
+class LizardFigurineHot3DRobolab(LibraryObject):
+    name = "lizard_figurine_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/lizard_figurine.usd"
+
+
+@register_asset
+class MarkerHot3DRobolab(LibraryObject):
+    name = "marker_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/marker.usd"
+
+
+@register_asset
+class MegaphoneHot3DRobolab(LibraryObject):
+    name = "megaphone_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/megaphone.usd"
+
+
+@register_asset
+class MilkCartonHot3DRobolab(LibraryObject):
+    name = "milk_carton_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/milk_carton.usd"
+
+
+@register_asset
+class MugHot3DRobolab(LibraryObject):
+    name = "mug_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/mug.usd"
+
+
+@register_asset
+class MustardBottleHot3DRobolab(LibraryObject):
+    name = "mustard_bottle_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/mustard_bottle.usd"
+
+
+@register_asset
+class OrangeJuiceCartonHot3DRobolab(LibraryObject):
+    name = "orange_juice_carton_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/orange_juice_carton.usd"
+    )
+
+
+@register_asset
+class ParmesanCheeseCanisterHot3DRobolab(LibraryObject):
+    name = "parmesan_cheese_canister_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/parmesan_cheese_canister.usd"
+    )
+
+
+@register_asset
+class PitcherHot3DRobolab(LibraryObject):
+    name = "pitcher_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/pitcher.usd"
+
+
+@register_asset
+class PotatoMasherHot3DRobolab(LibraryObject):
+    name = "potato_masher_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/potato_masher.usd"
+
+
+@register_asset
+class RemoteControlHot3DRobolab(LibraryObject):
+    name = "remote_control_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/remote_control.usd"
+
+
+@register_asset
+class RubiksCubeHot3DRobolab(LibraryObject):
+    name = "rubiks_cube_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/rubiks_cube.usd"
+
+
+@register_asset
+class SaladDressingBottleHot3DRobolab(LibraryObject):
+    name = "salad_dressing_bottle_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/salad_dressing_bottle.usd"
+    )
+
+
+@register_asset
+class SmartphoneHot3DRobolab(LibraryObject):
+    name = "smartphone_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/smartphone.usd"
+
+
+@register_asset
+class SoupCanHot3DRobolab(LibraryObject):
+    name = "soup_can_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/soup_can.usd"
+
+
+@register_asset
+class SpatulaHot3DRobolab(LibraryObject):
+    name = "spatula_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/spatula.usd"
+
+
+@register_asset
+class StorageBoxHot3DRobolab(LibraryObject):
+    name = "storage_box_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/storage_box.usd"
+
+
+@register_asset
+class TomatoSauceCanHot3DRobolab(LibraryObject):
+    name = "tomato_sauce_can_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/tomato_sauce_can.usd"
+
+
+@register_asset
+class WoodenBowlHot3DRobolab(LibraryObject):
+    name = "wooden_bowl_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/wooden_bowl.usd"
+
+
+@register_asset
+class WoodenSpoonsHot3DRobolab(LibraryObject):
+    name = "wooden_spoons_hot3d_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/hot3d/wooden_spoons.usd"
+
+
+@register_asset
+class Apple01ObjaverseRobolab(LibraryObject):
+    name = "apple_01_objaverse_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/objaverse/apple_01.usd"
+    # Objaverse meshes ship at roughly 100x real-world scale; downscale to a realistic apple size.
+    scale = (0.01, 0.01, 0.01)
+
+
+@register_asset
+class Apple02ObjaverseRobolab(LibraryObject):
+    name = "apple_02_objaverse_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/objaverse/apple_02.usd"
+    # Unlike apple_01, this mesh has no root scale to replace and already measures ~7.5cm.
+
+
+@register_asset
+class Bagel00ObjaverseRobolab(LibraryObject):
+    name = "bagel_00_objaverse_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/objaverse/bagel_00.usd"
+
+
+@register_asset
+class Bagel06ObjaverseRobolab(LibraryObject):
+    name = "bagel_06_objaverse_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/objaverse/bagel_06.usd"
+
+
+@register_asset
+class Bagel07ObjaverseRobolab(LibraryObject):
+    name = "bagel_07_objaverse_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/objaverse/bagel_07.usd"
+
+
+@register_asset
+class Baguette02ObjaverseRobolab(LibraryObject):
+    name = "baguette_02_objaverse_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/objaverse/baguette_02.usd"
+
+
+@register_asset
+class GregorysCoffeeCupObjaverseRobolab(LibraryObject):
+    name = "gregorys_coffee_cup_objaverse_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/objaverse/gregorys_coffee_cup.usd"
+    )
+
+
+@register_asset
+class LunchbagObjaverseRobolab(LibraryObject):
+    name = "lunchbag_objaverse_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/objaverse/lunchbag.usd"
+
+
+@register_asset
+class RedBellPepperObjaverseRobolab(LibraryObject):
+    name = "red_bell_pepper_objaverse_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/objaverse/red_bell_pepper.usd"
+    )
+
+
+@register_asset
+class SnickersBarObjaverseRobolab(LibraryObject):
+    name = "snickers_bar_objaverse_robolab"
+    tags = ["object", "graspable", "food", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/objaverse/snickers_bar.usd"
+
+
+@register_asset
+class BananaYcbRobolab(LibraryObject):
+    name = "banana_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/banana.usd"
+
+
+@register_asset
+class BowlYcbRobolab(LibraryObject):
+    name = "bowl_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/bowl.usd"
+
+
+@register_asset
+class BrickYcbRobolab(LibraryObject):
+    name = "brick_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/brick.usd"
+
+
+@register_asset
+class CheezItYcbRobolab(LibraryObject):
+    name = "cheez_it_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/cheez_it.usd"
+
+
+@register_asset
+class ChocolatePuddingYcbRobolab(LibraryObject):
+    name = "chocolate_pudding_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/chocolate_pudding.usd"
+
+
+@register_asset
+class ClampYcbRobolab(LibraryObject):
+    name = "clamp_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/clamp.usd"
+
+
+@register_asset
+class CoffeeCanYcbRobolab(LibraryObject):
+    name = "coffee_can_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/coffee_can.usd"
+
+
+@register_asset
+class CordlessDrillYcbRobolab(LibraryObject):
+    name = "cordless_drill_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/cordless_drill.usd"
+
+
+@register_asset
+class DryEraseMarkerYcbRobolab(LibraryObject):
+    name = "dry_erase_marker_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/dry_erase_marker.usd"
+
+
+@register_asset
+class JelloYcbRobolab(LibraryObject):
+    name = "jello_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/jello.usd"
+
+
+@register_asset
+class MugYcbRobolab(LibraryObject):
+    name = "mug_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/mug.usd"
+
+
+@register_asset
+class MustardYcbRobolab(LibraryObject):
+    name = "mustard_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/mustard.usd"
+
+
+@register_asset
+class PitcherYcbRobolab(LibraryObject):
+    name = "pitcher_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/pitcher.usd"
+
+
+@register_asset
+class ScissorsYcbRobolab(LibraryObject):
+    name = "scissors_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/scissors.usd"
+
+
+@register_asset
+class SoftScrubYcbRobolab(LibraryObject):
+    name = "soft_scrub_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/soft_scrub.usd"
+
+
+@register_asset
+class SpamCanYcbRobolab(LibraryObject):
+    name = "spam_can_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/spam_can.usd"
+
+
+@register_asset
+class SpringClampYcbRobolab(LibraryObject):
+    name = "spring_clamp_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/spring_clamp.usd"
+
+
+@register_asset
+class SugarBoxYcbRobolab(LibraryObject):
+    name = "sugar_box_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/sugar_box.usd"
+
+
+@register_asset
+class TomatoSoupCanYcbRobolab(LibraryObject):
+    name = "tomato_soup_can_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/tomato_soup_can.usd"
+
+
+@register_asset
+class TunaCanYcbRobolab(LibraryObject):
+    name = "tuna_can_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/tuna_can.usd"
+
+
+@register_asset
+class WoodBlockYcbRobolab(LibraryObject):
+    name = "wood_block_ycb_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/wood_block.usd"
+
+
+@register_asset
+class AnzaMediumVompRobolab(LibraryObject):
+    name = "anza_medium_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/anza_medium/anza_medium.usd"
+    )
+
+
+@register_asset
+class BinA06VompRobolab(LibraryObject):
+    name = "bin_a06_vomp_robolab"
+    tags = ["object", "container", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/bin_a06/bin_a06.usd"
+
+
+@register_asset
+class BinB03VompRobolab(LibraryObject):
+    name = "bin_b03_vomp_robolab"
+    tags = ["object", "container", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/bin_b03/bin_b03.usd"
+
+
+@register_asset
+class BinB04VompRobolab(LibraryObject):
+    name = "bin_b04_vomp_robolab"
+    tags = ["object", "container", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/bin_b04/bin_b04.usd"
+
+
+@register_asset
+class ContainerF24VompRobolab(LibraryObject):
+    name = "container_f24_vomp_robolab"
+    tags = ["object", "container", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/container_f24/container_f24.usd"
+    # USD scale >1m and too large for the maple table.
+    scale = (0.25, 0.25, 0.25)
+
+
+@register_asset
+class CrabbypenholderVompRobolab(LibraryObject):
+    name = "crabbypenholder_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/crabbypenholder/crabbypenholder.usd"
+
+
+@register_asset
+class ForkBigVompRobolab(LibraryObject):
+    name = "fork_big_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/fork_big/fork_big.usd"
+
+
+@register_asset
+class ForkSmallVompRobolab(LibraryObject):
+    name = "fork_small_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/fork_small/fork_small.usd"
+    )
+
+
+@register_asset
+class MilkjugA01VompRobolab(LibraryObject):
+    name = "milkjug_a01_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/milkjug_a01/milkjug_a01.usd"
+    )
+
+
+@register_asset
+class PlasticpailA02VompRobolab(LibraryObject):
+    name = "plasticpail_a02_vomp_robolab"
+    tags = ["object", "container", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/plasticpail_a02/plasticpail_a02.usd"
+
+
+@register_asset
+class PlateLargeVompRobolab(LibraryObject):
+    name = "plate_large_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/plate_large/plate_large.usd"
+    )
+
+
+@register_asset
+class PlateSmallVompRobolab(LibraryObject):
+    name = "plate_small_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/plate_small/plate_small.usd"
+    )
+
+
+@register_asset
+class PumpkinlargeVompRobolab(LibraryObject):
+    name = "pumpkinlarge_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/pumpkinlarge/pumpkinlarge.usd"
+    )
+
+
+@register_asset
+class PumpkinsmallVompRobolab(LibraryObject):
+    name = "pumpkinsmall_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/pumpkinsmall/pumpkinsmall.usd"
+    )
+
+
+@register_asset
+class RackL04VompRobolab(LibraryObject):
+    name = "rack_l04_vomp_robolab"
+    tags = ["object", "container", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/rack_l04/rack_l04.usd"
+
+
+@register_asset
+class ServingBowlVompRobolab(LibraryObject):
+    name = "serving_bowl_vomp_robolab"
+    tags = ["object", "container", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/serving_bowl/serving_bowl.usd"
+    )
+
+
+@register_asset
+class Spatula01VompRobolab(LibraryObject):
+    name = "spatula_01_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/spatula_01/spatula_01.usd"
+    )
+
+
+@register_asset
+class Spatula13VompRobolab(LibraryObject):
+    name = "spatula_13_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/spatula_13/spatula_13.usd"
+    )
+
+
+@register_asset
+class Spatula14VompRobolab(LibraryObject):
+    name = "spatula_14_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/spatula_14/spatula_14.usd"
+    )
+
+
+@register_asset
+class Spatula15VompRobolab(LibraryObject):
+    name = "spatula_15_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/spatula_15/spatula_15.usd"
+    )
+
+
+@register_asset
+class SpoonBigVompRobolab(LibraryObject):
+    name = "spoon_big_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/spoon_big/spoon_big.usd"
+    )
+
+
+@register_asset
+class UtilityjugA01VompRobolab(LibraryObject):
+    name = "utilityjug_a01_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/utilityjug_a01/utilityjug_a01.usd"
+
+
+@register_asset
+class UtilityjugA03VompRobolab(LibraryObject):
+    name = "utilityjug_a03_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/utilityjug_a03/utilityjug_a03.usd"
+
+
+@register_asset
+class WhitepackerbottleA01VompRobolab(LibraryObject):
+    name = "whitepackerbottle_a01_vomp_robolab"
+    tags = ["object", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/whitepackerbottle_a01/whitepackerbottle_a01.usd"
+
+
+@register_asset
+class WireshelvingA01VompRobolab(LibraryObject):
+    name = "wireshelving_a01_vomp_robolab"
+    tags = ["object", "container", "graspable", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/vomp/wireshelving_a01/wireshelving_a01.usd"
+
+
+@register_asset
+class GreyBinRobolab(LibraryObject):
+    name = "grey_bin_robolab"
+    tags = ["object", "container", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/fixtures/grey_bin.usd"
+    # USD has 0.07 scale which is ignored by spawner. Setting it back again.
+    scale = (0.007, 0.007, 0.007)
+
+
+# ---------------------------------------------------------------------------
+# Procedural assets (Newton-safe, single-geometry cuboids)
+# ---------------------------------------------------------------------------
+
+_PROCEDURAL_TABLE_SPAWN_CFG = sim_utils.CuboidCfg(
+    size=(0.8, 1.5, 0.04),
+    rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+    collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005),
+    visible=False,
+)
+
+
+@register_asset
+class ProceduralTable(Object):
+    """Kinematic cuboid table (invisible collision surface). Newton-safe, single geometry."""
+
+    name = "procedural_table"
+    tags = ["background", "procedural"]
+    object_min_z: float = 0.0
+
+    def __init__(
+        self,
+        instance_name: str | None = None,
+        prim_path: str | None = None,
+        initial_pose: Pose | None = None,
+    ):
+        resolved_name = instance_name if instance_name is not None else "table"
+        resolved_prim = prim_path if prim_path is not None else "{ENV_REGEX_NS}/table"
+        super().__init__(
+            name=resolved_name,
+            prim_path=resolved_prim,
+            object_type=ObjectType.RIGID,
+            usd_path="",
+            initial_pose=initial_pose,
+        )
+
+    def _generate_rigid_cfg(self) -> RigidObjectCfg:
+        cfg = RigidObjectCfg(
+            prim_path=self.prim_path,
+            spawn=_PROCEDURAL_TABLE_SPAWN_CFG,
+            **self.asset_cfg_addon,
+        )
+        return self._add_initial_pose_to_cfg(cfg)
+
+
+_PROCEDURAL_CUBE_SPAWN_CFG = sim_utils.CuboidCfg(
+    size=(0.05, 0.1, 0.1),
+    physics_material=sim_utils.RigidBodyMaterialCfg(static_friction=0.5),
+    rigid_props=sim_utils.RigidBodyPropertiesCfg(
+        solver_position_iteration_count=16,
+        solver_velocity_iteration_count=0,
+        disable_gravity=False,
+    ),
+    collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005),
+    mass_props=sim_utils.MassPropertiesCfg(mass=0.2),
+)
+
+
+@register_asset
+class ProceduralCube(Object):
+    """Rigid cuboid manipuland (0.2 kg, 5x10x10 cm). Newton-safe, single geometry."""
+
+    name = "procedural_cube"
+    tags = ["object", "procedural"]
+
+    def __init__(
+        self,
+        instance_name: str | None = None,
+        prim_path: str | None = None,
+        initial_pose: Pose | None = None,
+    ):
+        resolved_name = instance_name if instance_name is not None else "object"
+        resolved_prim = prim_path if prim_path is not None else "{ENV_REGEX_NS}/Object"
+        super().__init__(
+            name=resolved_name,
+            prim_path=resolved_prim,
+            object_type=ObjectType.RIGID,
+            usd_path="",
+            initial_pose=initial_pose,
+        )
+
+    def _generate_rigid_cfg(self) -> RigidObjectCfg:
+        cfg = RigidObjectCfg(
+            prim_path=self.prim_path,
+            spawn=_PROCEDURAL_CUBE_SPAWN_CFG,
+            **self.asset_cfg_addon,
+        )
+        return self._add_initial_pose_to_cfg(cfg)

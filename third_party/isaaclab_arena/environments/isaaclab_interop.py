@@ -1,0 +1,139 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+import argparse
+
+from isaaclab_arena.assets.registries import EnvironmentRegistry
+from isaaclab_arena.cli.isaaclab_arena_cli import arena_env_builder_cfg_from_argparse
+from isaaclab_arena_environments.cli import (
+    add_environment_cli_args,
+    build_environment_from_cli,
+    ensure_environments_registered,
+    parse_and_return_external_environment_from_string,
+)
+
+
+def is_simulation_app_running() -> bool:
+    """Checks if the simulation app is running."""
+    import omni.kit.app
+
+    try:
+        app = omni.kit.app.get_app()
+        return app is not None and app.is_running()
+    except Exception:
+        return False
+
+
+def environment_registration_callback() -> list[str]:
+    """This function is for use with Isaac Lab scripts to register an IsaacLab Arena environment.
+
+    This function is passed to an Isaac Lab script as an external callback function. Example:
+
+    python IsaacLab/scripts/reinforcement_learning/rsl_rl/train.py
+        --external_callback isaaclab_arena.environments.isaaclab_interop.environment_registration_callback
+        --task lift_object
+        --num_envs 512
+        --object cracker_box
+        agent.policy.activation=relu
+
+    In this case the "lift_object" environment is registered with Isaac Lab before
+    running the RSL RL training script. The training script will then run the
+    training for the lift_object environment. In the example above we
+    also use an environment flag to set the object to be a cracker box and
+    Hydra to set the policy activation to be ReLU.
+
+    """
+    from isaaclab.app import AppLauncher
+
+    # Start the simulation app if it is not running.
+    if not is_simulation_app_running():
+        parser = argparse.ArgumentParser()
+        AppLauncher.add_app_launcher_args(parser)
+        args, _ = parser.parse_known_args()
+        AppLauncher(args)
+    _purge_leaked_isaaclab_assets_presets()
+
+    # Imports after the simulation app is started.
+    from isaaclab_arena.cli.isaaclab_arena_cli import (
+        add_external_environments_cli_args,
+        add_isaac_lab_cli_args,
+        add_isaaclab_arena_cli_args,
+    )
+    from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
+
+    # Get the requested environment from the CLI.
+    parser = argparse.ArgumentParser()
+    # NOTE(alexmillane, 2026.02.12): With the Isaac Lab interop, we use the task name to
+    # determine the environment to register. The environment is also registered under this name.
+    # The result is that a single argument tells Arena what to register, and Lab what to run.
+    parser.add_argument("--task", type=str, required=True, help="Name of the IsaacLab Arena environment to register.")
+    parser.add_argument(
+        "--arena_teleop_device",
+        type=str,
+        default=None,
+        help="Arena teleoperation device to configure without selecting Isaac Lab's legacy teleoperation stack.",
+    )
+    add_external_environments_cli_args(parser)
+    initial_args = parser.parse_known_args()[0]
+    environment_name = initial_args.task
+    ensure_environments_registered()
+    environment_registry = EnvironmentRegistry()
+    if initial_args.external_environment_class_path is not None:
+        external_environment_name, external_environment_factory_type = (
+            parse_and_return_external_environment_from_string(initial_args.external_environment_class_path)
+        )
+        environment_registry.register(external_environment_factory_type, external_environment_name)
+    environment_factory_type = environment_registry.get_component_by_name(environment_name)
+    # Get the full list of environment-specific CLI args.
+    AppLauncher.add_app_launcher_args(parser)
+    add_isaac_lab_cli_args(parser)
+    add_isaaclab_arena_cli_args(parser)
+    add_environment_cli_args(parser, environment_factory_type)
+    args, remaining_args = parser.parse_known_args()
+    if args.arena_teleop_device is not None:
+        if not hasattr(args, "teleop_device"):
+            raise ValueError("The selected Arena environment does not configure teleoperation devices.")
+        args.teleop_device = args.arena_teleop_device
+    # Create the environment config
+    isaaclab_arena_environment = build_environment_from_cli(environment_factory_type, args)
+    # Build and register the environment
+    # TODO(cvolk, 2026-07-06): [typed-config-migration] Remove this Namespace conversion when the Isaac Lab
+    # external callback can receive ArenaEnvBuilderCfg directly.
+    env_builder = ArenaEnvBuilder(isaaclab_arena_environment, arena_env_builder_cfg_from_argparse(args))
+    env_builder.build_registered()
+    # Return the arguments that were not consumed by this callback
+    return remaining_args
+
+
+def _purge_leaked_isaaclab_assets_presets() -> None:
+    """Drop the ``isaaclab_assets`` modules that Kit imported while starting the SimulationApp.
+
+    Call this immediately after ``AppLauncher(...)`` launches the app. It works around a class
+    duplication that otherwise makes ``InteractiveScene`` reject Arena's robot cfg with
+    "Unknown asset config type for robot".
+
+    Background: ``AppLauncher._create_app()`` deletes every ``*lab*`` module from ``sys.modules``,
+    starts ``SimulationApp``, then restores the saved copies. During startup Kit auto-loads the
+    ``isaaclab_assets`` extension, which re-imports (and re-executes) the Isaac Lab cfg modules
+    under the lazy loader — minting a *second* ``ArticulationCfg`` class. The robot presets built
+    at that moment bind to this duplicate class, and because their modules were not in the restored
+    set they leak into ``sys.modules`` carrying it. Arena builds its robot cfg from those presets
+    (e.g. ``FRANKA_PANDA_HIGH_PD_CFG``), while ``InteractiveScene`` — imported before launch and
+    restored — holds the original class, so ``isinstance(asset_cfg, ArticulationCfg)`` fails.
+
+    Dropping the leaked preset modules forces Arena's embodiments to re-import them against the
+    restored (canonical) cfg classes, keeping the robot cfg on the same ``ArticulationCfg`` the
+    scene checks.
+
+    Tracked upstream at https://github.com/isaac-sim/IsaacLab/issues/6514.
+    TODO: remove this workaround once IsaacLab #6514 is resolved.
+    """
+    import sys
+
+    leaked_module_names = [
+        name for name in sys.modules if name == "isaaclab_assets" or name.startswith("isaaclab_assets.")
+    ]
+    for module_name in leaked_module_names:
+        del sys.modules[module_name]

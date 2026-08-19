@@ -1,0 +1,18 @@
+{
+  "mass": 0.01,
+  "materialOptions": [],
+  "model_path": "",
+  "object_id": "omni6DPose_medicine_bottle_000",
+  "original_model_path": "",
+  "scale": 1,
+  "semantic_name": "medicine_bottle",
+  "size": [
+    0.06152497100830078,
+    0.11030638122558593,
+    0.06207268714904785
+  ],
+  "unit": "m",
+  "upAxis": [
+    "y"
+  ]
+}

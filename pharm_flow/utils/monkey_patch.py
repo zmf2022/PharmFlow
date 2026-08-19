@@ -1,0 +1,646 @@
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from copy import deepcopy
+from collections import deque
+import time
+
+import torch
+
+
+def patch_reset():
+    from isaaclab.envs.manager_based_rl_env import ManagerBasedRLEnv
+
+    def reset(
+        self: ManagerBasedRLEnv, seed: int | None = None, env_ids=None, options=None
+    ):
+        """Resets the specified environments and returns observations.
+
+        This function calls the :meth:`_reset_idx` function to reset the specified environments.
+        However, certain operations, such as procedural terrain generation, that happened during initialization
+        are not repeated.
+
+        Args:
+            seed: The seed to use for randomization. Defaults to None, in which case the seed is not set.
+            env_ids: The environment ids to reset. Defaults to None, in which case all environments are reset.
+            options: Additional information to specify how the environment is reset. Defaults to None.
+
+                Note:
+                    This argument is used for compatibility with Gymnasium environment definition.
+
+        Returns:
+            A tuple containing the observations and extras.
+        """
+        if env_ids is None:
+            env_ids = torch.arange(self.num_envs, dtype=torch.int32, device=self.device)
+
+        # trigger recorder terms for pre-reset calls
+        self.recorder_manager.record_pre_reset(env_ids)
+
+        # set the seed
+        if seed is not None:
+            self.seed(seed)
+
+        # reset state of scene
+        self._reset_idx(env_ids)
+
+        # update articulation kinematics
+        self.scene.write_data_to_sim()
+        self.sim.forward()
+        # if sensors are added to the scene, make sure we render to reflect changes in reset
+        if self.has_rtx_sensors and self.cfg.num_rerenders_on_reset > 0:
+            for _ in range(self.cfg.num_rerenders_on_reset):
+                self.sim.render()
+
+        # trigger recorder terms for post-reset calls
+        self.recorder_manager.record_post_reset(env_ids)
+
+        # compute observations
+        self.obs_buf = self.observation_manager.compute(update_history=True)
+
+        if self.cfg.wait_for_textures and self.has_rtx_sensors:
+            if hasattr(self.sim.physics_manager, "assets_loading"):
+                while self.sim.physics_manager.assets_loading():
+                    self.sim.render()
+        arena_cfg = getattr(self.cfg, "isaaclab_arena_env", None)
+        arena_task = getattr(arena_cfg, "task", None)
+        if arena_task is not None and hasattr(arena_task, "foreground_semantic_id_mapping"):
+            arena_task.foreground_semantic_id_mapping
+            # self.cfg.setup_camera_and_foreground(self.scene)
+            arena_task.record_semantic_id_mapping(self.scene)
+        # return observations
+        return self.obs_buf, self.extras
+    ManagerBasedRLEnv.reset = reset
+
+# monkey patch the configclass to allow validate dict with key is not a string
+
+
+# def patch_configclass():
+#     from isaaclab.utils.configclass import configclass
+#     import sys
+#     configclass_module = sys.modules["isaaclab.utils.configclass"]
+
+#     orig_validate = configclass_module._validate
+
+#     def _validate_with_dict_key_not_string(obj, prefix=""):
+#         if isinstance(obj, dict):
+#             if any(not isinstance(key, str) for key in obj.keys()):
+#                 obj = {str(key): value for key, value in obj.items()}
+#         return orig_validate(obj, prefix=prefix)
+
+#     configclass_module._validate = _validate_with_dict_key_not_string
+
+
+def patch_configclass():
+    from isaaclab.utils.configclass import configclass
+    import sys
+
+    configclass_module = sys.modules["isaaclab.utils.configclass"]
+    orig_validate = configclass_module._validate
+
+    def _validate_with_dict_key_not_string(obj, prefix=""):
+        if not hasattr(_validate_with_dict_key_not_string, '_visited'):
+            _validate_with_dict_key_not_string._visited = set()
+            is_top_level = True
+        else:
+            is_top_level = False
+
+        try:
+            obj_id = id(obj)
+            if obj_id in _validate_with_dict_key_not_string._visited:
+                return []
+            if isinstance(obj, (dict, list, tuple)) or hasattr(obj, "__dict__"):
+                _validate_with_dict_key_not_string._visited.add(obj_id)
+
+            return orig_validate(obj, prefix=prefix)
+        finally:
+            if is_top_level:
+                delattr(_validate_with_dict_key_not_string, '_visited')
+
+    configclass_module._validate = _validate_with_dict_key_not_string
+
+
+# monkey patch the recorder manager to have ep_meta stored in the hdf5 file
+def patch_export_episodes():
+    """Patch RecorderManager.export_episodes to pass ep_meta and call pre_export."""
+    from isaaclab.managers.recorder_manager import RecorderManager
+
+    orig_export_episodes = RecorderManager.export_episodes
+
+    def export_episodes(self, env_ids=None) -> None:
+        if env_ids is None:
+            env_ids = list(range(self._env.num_envs))
+        if isinstance(env_ids, torch.Tensor):
+            env_ids = env_ids.tolist()
+        if len(self.active_terms) and any(
+            (env_id in self._episodes and not self._episodes[env_id].is_empty())
+            for env_id in env_ids
+        ):
+            ep_meta = (
+                self._env.cfg.get_ep_meta()
+                if hasattr(self._env.cfg, "get_ep_meta")
+                else {"env_name": type(self._env).__name__, "type": 2}
+            )
+            if self._dataset_file_handler is not None:
+                self._dataset_file_handler.add_env_args(ep_meta)
+            if self._failed_episode_dataset_file_handler is not None:
+                self._failed_episode_dataset_file_handler.add_env_args(ep_meta)
+            for env_id in env_ids:
+                if env_id in self._episodes and not self._episodes[env_id].is_empty():
+                    self._episodes[env_id].pre_export()
+        orig_export_episodes(self, env_ids)
+
+    RecorderManager.export_episodes = export_episodes
+
+
+# patch the recorder manager to have joint targets stored in the hdf5 file
+def patch_recorder_manager_joint_targets():
+    from isaaclab.managers.recorder_manager import RecorderTerm, RecorderManager
+
+    def record_term_record_pre_physics_step(self: RecorderTerm):
+        return None, None
+    RecorderTerm.record_pre_physics_step = record_term_record_pre_physics_step
+
+    def recorder_manager_record_pre_physics_step(self: RecorderManager):
+        if len(self.active_terms) == 0:
+            return
+
+        for term in self._terms.values():
+            key, value = term.record_pre_physics_step()
+            self.add_to_episodes(key, value)
+
+    RecorderManager.record_pre_physics_step = recorder_manager_record_pre_physics_step
+
+    # TODO: add RecorderManager.record_pre_physics_step to env step
+
+    from isaaclab.utils.datasets.episode_data import EpisodeData
+
+    EpisodeData._next_joint_target_index = 0
+
+    def get_joint_target(episode_data: EpisodeData, joint_target_index) -> dict | torch.Tensor | None:
+        """Get the joint target of the specified index from the dataset."""
+        if "joint_targets" not in episode_data._data:
+            return None
+
+        joint_targets = episode_data._data["joint_targets"]
+
+        def get_joint_target_helper(joint_targets, joint_target_index) -> dict | torch.Tensor | None:
+            if isinstance(joint_targets, dict):
+                output_joint_targets = dict()
+                for key, value in joint_targets.items():
+                    output_joint_targets[key] = get_joint_target_helper(value, joint_target_index)
+                    if output_joint_targets[key] is None:
+                        return None
+            elif isinstance(joint_targets, torch.Tensor):
+                if joint_target_index >= len(joint_targets):
+                    return None
+                output_joint_targets = joint_targets[joint_target_index]
+            else:
+                raise ValueError(f"Invalid joint target type: {type(joint_targets)}")
+            return output_joint_targets
+
+        output_joint_targets = get_joint_target_helper(joint_targets, joint_target_index)
+        return output_joint_targets
+
+    def get_next_joint_target(self) -> dict | torch.Tensor | None:
+        """Get the next joint target from the dataset."""
+        joint_target = get_joint_target(self, self._next_joint_target_index)
+        if joint_target is not None:
+            self._next_joint_target_index += 1
+        return joint_target
+
+    EpisodeData.get_next_joint_target = get_next_joint_target
+
+    def get_state(self, state_index) -> dict | None:
+        """Get the state of the specified index from the dataset."""
+        if "states" not in self._data:
+            return None
+
+        states = self._data["states"]
+
+        def get_state_helper(states, state_index) -> dict | torch.Tensor | None:
+            if isinstance(states, dict):
+                output_state = dict()
+                for key, value in states.items():
+                    output_state[key] = get_state_helper(value, state_index)
+                    if output_state[key] is None:
+                        return None
+            elif isinstance(states, torch.Tensor):
+                if state_index >= len(states):
+                    return None
+                output_state = states[state_index, None]  # fix here
+            elif isinstance(states, list):
+                if state_index >= len(states):
+                    return None
+                output_state = [states[state_index]]
+            else:
+                raise ValueError(f"Invalid state type: {type(states)}")
+            return output_state
+
+        output_state = get_state_helper(states, state_index)
+        return output_state
+
+    EpisodeData.get_state = get_state
+
+    def add(self, key: str, value: torch.Tensor | dict, clone: bool = True):
+        """Add a key-value pair to the dataset.
+
+        The key can be nested by using the "/" character.
+        For example: "obs/joint_pos".
+
+        Args:
+            key: The key name.
+            value: The corresponding value of tensor type or of dict type.
+            clone: Whether to copy tensor data before storing it.
+        """
+        # check datatype
+        if isinstance(value, dict):
+            for sub_key, sub_value in value.items():
+                self.add(f"{key}/{sub_key}", sub_value, clone=clone)
+            return
+
+        stored = value.clone() if clone and isinstance(value, torch.Tensor) else value
+
+        sub_keys = key.split("/")
+        current_dataset_pointer = self._data
+        for sub_key_index in range(len(sub_keys)):
+            if sub_key_index == len(sub_keys) - 1:
+                # Add value to the final dict layer
+                if sub_keys[sub_key_index] not in current_dataset_pointer:
+                    current_dataset_pointer[sub_keys[sub_key_index]] = [stored]
+                else:
+                    current_dataset_pointer[sub_keys[sub_key_index]].append(stored)
+                break
+            # key index
+            if sub_keys[sub_key_index] not in current_dataset_pointer:
+                current_dataset_pointer[sub_keys[sub_key_index]] = dict()
+            current_dataset_pointer = current_dataset_pointer[sub_keys[sub_key_index]]
+    EpisodeData.add = add
+
+    def pre_export(self):
+        def pre_export_helper(data):
+            for key, value in data.items():
+                if isinstance(value, list):
+                    data[key] = torch.stack(value)
+                elif isinstance(value, dict):
+                    pre_export_helper(value)
+        start_time = time.time()
+        pre_export_helper(self._data)
+        end_time = time.time()
+        print(f"pre_export time: {end_time - start_time:.2f}s")
+    EpisodeData.pre_export = pre_export
+
+
+def patch_step():
+    from isaaclab.envs.manager_based_rl_env import ManagerBasedRLEnv
+
+    def step(self, action: torch.Tensor):
+        """Execute one time-step of the environment's dynamics and reset terminated environments.
+
+        Unlike the :class:`ManagerBasedEnv.step` class, the function performs the following operations:
+
+        1. Process the actions.
+        2. Perform physics stepping.
+        3. Perform rendering if gui is enabled.
+        4. Update the environment counters and compute the rewards and terminations.
+        5. Reset the environments that terminated.
+        6. Compute the observations.
+        7. Return the observations, rewards, resets and extras.
+
+        Args:
+            action: The actions to apply on the environment. Shape is (num_envs, action_dim).
+
+        Returns:
+            A tuple containing the observations, rewards, resets (terminated and truncated) and extras.
+        """
+        # process actions
+        self.action_manager.process_action(action.to(self.device))
+
+        self.recorder_manager.record_pre_step()
+
+        # check if we need to do rendering within the physics loop
+        # note: checked here once to avoid multiple checks within the loop
+        is_rendering = self.sim.is_rendering
+
+        # perform physics stepping
+        for _ in range(self.cfg.decimation):
+            self._sim_step_counter += 1
+            # set actions into buffers
+            self.action_manager.apply_action()
+            # set actions into simulator
+            self.scene.write_data_to_sim()
+            # simulate
+            self.sim.step(render=False)
+            self.recorder_manager.record_pre_physics_step()
+            # render between steps only if the GUI or an RTX sensor needs it
+            # note: we assume the render interval to be the shortest accepted rendering interval.
+            #    If a camera needs rendering at a faster frequency, this will lead to unexpected behavior.
+            if self._sim_step_counter % self.cfg.sim.render_interval == 0 and is_rendering:
+                self.sim.render()
+            # update buffers at sim dt
+            self.scene.update(dt=self.physics_dt)
+
+        # post-step:
+        # -- update env counters (used for curriculum generation)
+        self.episode_length_buf += 1  # step in current episode (per env)
+        self.common_step_counter += 1  # total step (common for all envs)
+        # -- check terminations
+        self.reset_buf = self.termination_manager.compute()
+        self.reset_time_outs = self.termination_manager.time_outs
+        success_term = self.termination_manager.get_term("success") if "success" in self.termination_manager.active_terms else None
+        self.extras["is_success"] = success_term if success_term is not None else self.termination_manager._terminated_buf
+
+        # Track true task successes independently of the dense success bonus. The
+        # counters are updated only for completed episodes, so timeouts and other
+        # terminations contribute failures rather than being mistaken for success.
+        if not hasattr(self, "_success_rate_total_episodes"):
+            self._success_rate_total_episodes = 0
+            self._success_rate_total_successes = 0
+            self._success_rate_recent_results = deque(maxlen=100)
+            self._success_rate_last_printed_episodes = 0
+        completed_success = success_term & self.reset_buf if success_term is not None else None
+        if completed_success is not None:
+            completed_count = int(self.reset_buf.sum().item())
+            success_count = int(completed_success.sum().item())
+            self._success_rate_total_episodes += completed_count
+            self._success_rate_total_successes += success_count
+            self._success_rate_recent_results.extend(
+                [False] * (completed_count - success_count) + [True] * success_count
+            )
+        # -- reward computation
+        self.reward_buf = self.reward_manager.compute(dt=self.step_dt)
+
+        if len(self.recorder_manager.active_terms) > 0:
+            # update observations for recording if needed
+            self.obs_buf = self.observation_manager.compute()
+            self.recorder_manager.record_post_step()
+
+        # -- reset envs that terminated/timed-out and log the episode information
+        reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+        if len(reset_env_ids) > 0:
+            obs_final_buf = self.observation_manager.compute(update_history=False)
+            self.extras['final_obs'] = obs_final_buf
+
+            # trigger recorder terms for pre-reset calls
+            self.recorder_manager.record_pre_reset(reset_env_ids)
+
+            self._reset_idx(reset_env_ids)
+            # update articulation kinematics
+            self.scene.write_data_to_sim()
+            self.sim.forward()
+
+            # if sensors are added to the scene, make sure we render to reflect changes in reset
+            if self.render_enabled and is_rendering and self.has_rtx_sensors and self.cfg.num_rerenders_on_reset > 0:
+                for _ in range(self.cfg.num_rerenders_on_reset):
+                    self.sim.render()
+
+            # trigger recorder terms for post-reset calls
+            self.recorder_manager.record_post_reset(reset_env_ids)
+
+            if self._success_rate_total_episodes > 0:
+                self.extras["log"]["Metrics/success_rate"] = torch.tensor(
+                    self._success_rate_total_successes / self._success_rate_total_episodes,
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                recent_success_rate = sum(self._success_rate_recent_results) / len(self._success_rate_recent_results)
+                self.extras["log"]["Metrics/success_rate_recent_100"] = torch.tensor(
+                    recent_success_rate,
+                    dtype=torch.float32,
+                    device=self.device,
+                )
+                if self._success_rate_total_episodes - self._success_rate_last_printed_episodes >= 100:
+                    cumulative_success_rate = self._success_rate_total_successes / self._success_rate_total_episodes
+                    print(
+                        f"[SuccessRate] episodes={self._success_rate_total_episodes} "
+                        f"cumulative={cumulative_success_rate:.2%} recent_100={recent_success_rate:.2%}",
+                        flush=True,
+                    )
+                    self._success_rate_last_printed_episodes = self._success_rate_total_episodes
+
+        # -- update command
+        self.command_manager.compute(dt=self.step_dt)
+        # -- step interval events
+        if "interval" in self.event_manager.available_modes:
+            self.event_manager.apply(mode="interval", dt=self.step_dt)
+        # -- compute observations
+        # note: done after reset to get the correct observations for reset envs
+        self.obs_buf = self.observation_manager.compute(update_history=True)
+
+        # return observations, rewards, resets and extras
+        return self.obs_buf, self.reward_buf, self.reset_buf, self.reset_time_outs, self.extras
+
+    ManagerBasedRLEnv.step = step
+
+    def reset_to_check_state(
+        self,
+        state: dict[str, dict[str, dict[str, torch.Tensor]]],
+        env_ids,
+        seed: int | None = None,
+        is_relative: bool = False,
+    ):
+        """Resets specified environments to provided states.
+
+        This function resets the environments to the provided states. The state is a dictionary
+        containing the state of the scene entities. Please refer to :meth:`InteractiveScene.get_state`
+        for the format.
+
+        The function is different from the :meth:`reset` function as it resets the environments to specific states,
+        instead of using the randomization events for resetting the environments.
+
+        Args:
+            state: The state to reset the specified environments to. Please refer to
+                :meth:`InteractiveScene.get_state` for the format.
+            env_ids: The environment ids to reset. Defaults to None, in which case all environments are reset.
+            seed: The seed to use for randomization. Defaults to None, in which case the seed is not set.
+            is_relative: If set to True, the state is considered relative to the environment origins.
+                Defaults to False.
+        """
+        # reset all envs in the scene if env_ids is None
+        if env_ids is None:
+            env_ids = torch.arange(self.num_envs, dtype=torch.int32, device=self.device)
+
+        # trigger recorder terms for pre-reset calls
+        # self.recorder_manager.record_pre_reset(env_ids)
+
+        # set the seed
+        if seed is not None:
+            self.seed(seed)
+
+        self._reset_idx(env_ids)
+
+        # set the state
+        self.scene.reset_to(state, env_ids, is_relative=is_relative)
+
+        # update articulation kinematics
+        self.sim.forward()
+
+        # if sensors are added to the scene, make sure we render to reflect changes in reset
+        if self.has_rtx_sensors and self.cfg.num_rerenders_on_reset > 0:
+            for _ in range(self.cfg.num_rerenders_on_reset):
+                self.sim.render()
+
+        # trigger recorder terms for post-reset calls
+        # self.recorder_manager.record_post_reset(env_ids)
+
+        # compute observations
+        self.obs_buf = self.observation_manager.compute(update_history=True)
+
+        # return observations
+        return self.obs_buf, self.extras
+
+    ManagerBasedRLEnv.reset_to_check_state = reset_to_check_state
+
+
+YAML_CACHE = {}
+
+
+def patch_yaml_load():
+    import yaml
+
+    orig_safe_load = yaml.safe_load
+
+    def cached_safe_load(stream):
+        if isinstance(stream, (str, bytes)):
+            cache_key = stream
+        else:
+            cache_key = stream.name
+        # print(f"yaml load {cache_key}")
+        if cache_key not in YAML_CACHE:
+            # print(f"cache miss {cache_key}")
+            YAML_CACHE[cache_key] = orig_safe_load(stream)
+        return deepcopy(YAML_CACHE[cache_key])
+
+    yaml.safe_load = cached_safe_load
+
+
+
+
+def patch_create_teleop_device():
+    import isaaclab.devices.teleop_device_factory as teleop_device_factory
+    from isaaclab.devices import DeviceBase, DeviceCfg
+    from isaaclab.devices.retargeter_base import RetargeterBase
+    from collections.abc import Callable
+    import inspect
+    import omni
+
+    def create_teleop_device(env, device_name: str, devices_cfg: dict[str, DeviceCfg], callbacks: dict[str, Callable] | None = None) -> DeviceBase:
+        if device_name not in devices_cfg:
+            raise ValueError(f"Device '{device_name}' not found in teleop device configurations")
+
+        device_cfg = devices_cfg[device_name]
+        callbacks = callbacks or {}
+
+        # Isaac Lab 3 declares the constructor on each configuration instead
+        # of maintaining the DEVICE_MAP registry used by Isaac Lab 2.x.
+        constructor = getattr(device_cfg, "class_type", None)
+        if constructor is None:
+            raise ValueError(
+                f"Device configuration '{device_name}' does not declare class_type. "
+                "Set cfg.class_type to a DeviceBase subclass."
+            )
+        resolved_constructor = constructor._resolve() if hasattr(constructor, "_resolve") else constructor
+        if not issubclass(resolved_constructor, DeviceBase):
+            raise TypeError(
+                f"class_type for '{device_name}' must be a DeviceBase subclass; got {constructor}"
+            )
+
+        # Try to create retargeters if they are configured
+        retargeters = []
+        if hasattr(device_cfg, "retargeters") and device_cfg.retargeters is not None:
+            try:
+                # Isaac Lab 3 stores the retargeter constructor on its config.
+                for retargeter_cfg in device_cfg.retargeters:
+                    retargeter_constructor = getattr(retargeter_cfg, "retargeter_type", None)
+                    if retargeter_constructor is None:
+                        raise ValueError(
+                            f"Retargeter configuration {type(retargeter_cfg).__name__} does not declare "
+                            "retargeter_type."
+                        )
+                    resolved_retargeter = (
+                        retargeter_constructor._resolve()
+                        if hasattr(retargeter_constructor, "_resolve")
+                        else retargeter_constructor
+                    )
+                    if not issubclass(resolved_retargeter, RetargeterBase):
+                        raise TypeError(
+                            f"retargeter_type for {type(retargeter_cfg).__name__} must be a RetargeterBase "
+                            f"subclass; got {retargeter_constructor}"
+                        )
+                    retargeters.append(resolved_retargeter(retargeter_cfg))
+
+            except NameError as e:
+                raise ValueError(f"Failed to create retargeters: {e}")
+
+        # Check if the constructor accepts retargeters parameter
+        constructor_params = inspect.signature(resolved_constructor).parameters
+        params = {"cfg": device_cfg}
+        if "retargeters" in constructor_params:
+            params["retargeters"] = retargeters
+        if "env" in constructor_params:
+            params["env"] = env
+
+        device = resolved_constructor(**params)
+
+        # Register callbacks
+        for key, callback in callbacks.items():
+            device.add_callback(key, callback)
+
+        omni.log.info(f"Created teleoperation device: {device_name}")
+        return device
+
+    teleop_device_factory.create_teleop_device = create_teleop_device
+
+
+
+
+def patch_termination_manager():
+    """
+    Temporary fix for TerminationManager.compute() method to correctly store each termination condition's result
+    in _term_dones when computing termination signals.
+    In the current implementation, once self._term_dones is set to True, it cannot be modified back to False.
+    """
+    import torch
+    from isaaclab.managers import TerminationManager
+
+    def compute(self) -> torch.Tensor:
+        # reset computation
+        self._truncated_buf[:] = False
+        self._terminated_buf[:] = False
+        # iterate over all the termination terms
+        for i, term_cfg in enumerate(self._term_cfgs):
+            value = term_cfg.func(self._env, **term_cfg.params)
+            # store timeout signal separately
+            if term_cfg.time_out:
+                self._truncated_buf |= value
+            else:
+                self._terminated_buf |= value
+            # add to episode dones
+            self._term_dones[:, i] = value  # [core fix]
+            rows = value.nonzero(as_tuple=True)[0]  # indexing is cheaper than boolean advance indexing
+            if rows.numel() > 0:
+                self._term_dones[rows] = False
+                self._term_dones[rows, i] = True
+        # return combined termination signal
+        return self._truncated_buf | self._terminated_buf
+
+    TerminationManager.compute = compute
+
+
+patch_reset()
+patch_configclass()
+patch_export_episodes()
+patch_recorder_manager_joint_targets()
+patch_step()
+patch_yaml_load()
+patch_termination_manager()

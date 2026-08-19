@@ -1,0 +1,152 @@
+# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+import torch
+from dataclasses import dataclass
+
+
+@dataclass
+class Pose:
+    """Transform taking frame A to frame B.
+
+    T_A_B = (t_B_A, q_B_A)
+
+    p_B = p_A + t_B_A
+    q_B = q_A * q_B_A
+    """
+
+    position_xyz: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    """Translation vector from frame A to frame B."""
+
+    rotation_xyzw: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+    """Quaternion from frame A to frame B. Order is (x, y, z, w)."""
+
+    def __post_init__(self):
+        assert isinstance(self.position_xyz, tuple)
+        assert isinstance(self.rotation_xyzw, tuple)
+        assert len(self.position_xyz) == 3
+        assert len(self.rotation_xyzw) == 4
+
+    @staticmethod
+    def identity() -> "Pose":
+        return Pose(position_xyz=(0.0, 0.0, 0.0), rotation_xyzw=(0.0, 0.0, 0.0, 1.0))
+
+    def to_tensor(self, device: torch.device) -> torch.Tensor:
+        """Convert the pose to a tensor.
+
+        The returned tensor has shape (1, 7), and is of the order (x, y, z, qx, qy, qz, qw).
+
+        Args:
+            device: The device to convert the tensor to.
+
+        Returns:
+            The pose as a tensor of shape (1, 7).
+        """
+        position_tensor = torch.tensor(self.position_xyz, device=device)
+        rotation_tensor = torch.tensor(self.rotation_xyzw, device=device)
+        return torch.cat([position_tensor, rotation_tensor])
+
+    def multiply(self, other: "Pose") -> "Pose":
+        return compose_poses(self, other)
+
+    def translate(self, xyz_offset: tuple[float, float, float]) -> "Pose":
+        """Return this pose shifted by ``xyz_offset`` (rotation unchanged)."""
+        return Pose(
+            position_xyz=translate_by_xyz_offset(self.position_xyz, xyz_offset),
+            rotation_xyzw=self.rotation_xyzw,
+        )
+
+    def to_transform_matrix(self, device: torch.device) -> torch.Tensor:
+        """Convert the pose to a 4x4 homogeneous transform matrix."""
+        import isaaclab.utils.math as math_utils
+
+        rotation = math_utils.matrix_from_quat(torch.tensor(self.rotation_xyzw, device=device))
+        return math_utils.make_pose(torch.tensor(self.position_xyz, device=device), rotation)
+
+
+def compose_poses(T_C_B: Pose, T_B_A: Pose) -> Pose:
+    """Compose two poses. T_C_A = T_C_B * T_B_A
+
+    Args:
+        T_B_A: The pose taking points from A to B.
+        T_C_B: The pose taking points from B to C.
+
+    Returns:
+        The pose taking points from A to C.
+    """
+    from isaaclab.utils.math import matrix_from_quat, quat_from_matrix
+
+    R_B_A = matrix_from_quat(torch.tensor(T_B_A.rotation_xyzw))
+    R_C_B = matrix_from_quat(torch.tensor(T_C_B.rotation_xyzw))
+    # Compose the rotations
+    R_C_A = R_C_B @ R_B_A
+    q_C_A = quat_from_matrix(R_C_A)
+    # Compose the translations
+    t_C_A = R_C_B @ torch.tensor(T_B_A.position_xyz) + torch.tensor(T_C_B.position_xyz)
+    return Pose(position_xyz=tuple(t_C_A.tolist()), rotation_xyzw=tuple(q_C_A.tolist()))
+
+
+def translate_by_xyz_offset(
+    target: tuple[float, float, float], xyz_offset: tuple[float, float, float]
+) -> tuple[float, float, float]:
+    """Return ``target`` shifted by ``xyz_offset``.
+
+    Args:
+        target: The (x, y, z) position to shift.
+        xyz_offset: The (x, y, z) translation to add.
+    """
+    return (target[0] + xyz_offset[0], target[1] + xyz_offset[1], target[2] + xyz_offset[2])
+
+
+@dataclass
+class PosePerEnv:
+    """Per-environment poses (one Pose per env, used for batched placement)."""
+
+    poses: list[Pose]
+    """One Pose per environment."""
+
+
+@dataclass
+class PoseRange:
+    """Range of poses.
+
+    Args:
+        position_xyz_min: The minimum position in x, y, z.
+        position_xyz_max: The maximum position in x, y, z.
+        rpy_min: The minimum rotation in roll, pitch, yaw (in radians).
+        rpy_max: The maximum rotation in roll, pitch, yaw (in radians).
+    """
+
+    position_xyz_min: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    position_xyz_max: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rpy_min: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rpy_max: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+    def to_dict(self) -> dict[str, tuple[float, float]]:
+        return {
+            "x": (self.position_xyz_min[0], self.position_xyz_max[0]),
+            "y": (self.position_xyz_min[1], self.position_xyz_max[1]),
+            "z": (self.position_xyz_min[2], self.position_xyz_max[2]),
+            "roll": (self.rpy_min[0], self.rpy_max[0]),
+            "pitch": (self.rpy_min[1], self.rpy_max[1]),
+            "yaw": (self.rpy_min[2], self.rpy_max[2]),
+        }
+
+    def get_midpoint(self) -> Pose:
+        from isaaclab.utils.math import quat_from_euler_xyz
+
+        roll = torch.tensor((self.rpy_min[0] + self.rpy_max[0]) / 2)
+        pitch = torch.tensor((self.rpy_min[1] + self.rpy_max[1]) / 2)
+        yaw = torch.tensor((self.rpy_min[2] + self.rpy_max[2]) / 2)
+        quat = quat_from_euler_xyz(roll, pitch, yaw)
+        position_xyz = torch.tensor([
+            (self.position_xyz_min[0] + self.position_xyz_max[0]) / 2,
+            (self.position_xyz_min[1] + self.position_xyz_max[1]) / 2,
+            (self.position_xyz_min[2] + self.position_xyz_max[2]) / 2,
+        ])
+        return Pose(
+            position_xyz=tuple(position_xyz.tolist()),
+            rotation_xyzw=tuple(quat.tolist()),
+        )

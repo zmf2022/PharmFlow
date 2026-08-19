@@ -1,0 +1,292 @@
+# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+from typing import Any
+
+import isaaclab.sim as sim_utils
+from isaaclab.envs.common import ViewerCfg
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+
+from isaaclab_arena.assets.background import Background
+from isaaclab_arena.assets.lightwheel_kitchen_factory import register_lightwheel_kitchens
+from isaaclab_arena.assets.lightwheel_utils import acquire_lightwheel_asset
+from isaaclab_arena.assets.nucleus import ARENA_NUCLEUS_DIR, ISAAC_STAGING_NUCLEUS_DIR
+from isaaclab_arena.assets.register import register_asset
+from isaaclab_arena.utils.pose import Pose
+
+
+class LibraryBackground(Background):
+    """
+    Base class for objects in the library which are defined in this file.
+    These objects have class attributes (rather than instance attributes).
+    """
+
+    name: str
+    tags: list[str]
+    usd_path: str | None = None
+    initial_pose: Pose | None = None
+    object_min_z: float
+    spawn_cfg_addon: dict[str, Any] = {}
+    asset_cfg_addon: dict[str, Any] = {}
+
+    def __init__(self, **kwargs):
+        # Check lazy USD paths are set by here
+        assert self.usd_path is not None
+        super().__init__(
+            name=self.name,
+            tags=self.tags,
+            usd_path=self.usd_path,
+            initial_pose=self.initial_pose,
+            object_min_z=self.object_min_z,
+            spawn_cfg_addon=self.spawn_cfg_addon,
+            asset_cfg_addon=self.asset_cfg_addon,
+            **kwargs,
+        )
+
+
+@register_asset
+class KitchenBackground(LibraryBackground):
+    """
+    Encapsulates the background scene for the kitchen.
+    """
+
+    name = "kitchen"
+    tags = ["background"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/background_library/kitchen_background/kitchen_background.usd"
+    initial_pose = Pose(position_xyz=(0.772, 3.39, -0.895), rotation_xyzw=(0, 0, -0.70711, 0.70711))
+    object_min_z = -0.2
+
+    def __init__(self):
+        super().__init__()
+
+
+@register_asset
+class KitchenWithOpenDrawerBackground(LibraryBackground):
+    """
+    Encapsulates the background scene for the kitchen with an open drawer.
+    """
+
+    name = "kitchen_with_open_drawer"
+    tags = ["background"]
+    usd_path = (
+        f"{ARENA_NUCLEUS_DIR}/Arena/assets/background_library/kitchen_scene_teleop_v3/kitchen_scene_teleop_v3.usd"
+    )
+    initial_pose = Pose(position_xyz=(0.772, 3.39, -0.895), rotation_xyzw=(0, 0, -0.70711, 0.70711))
+    object_min_z = -0.2
+
+    def __init__(self):
+        super().__init__()
+
+
+@register_asset
+class PackingTableBackground(LibraryBackground):
+    """
+    Encapsulates the background scene for the packing table.
+    """
+
+    name = "packing_table"
+    tags = ["background"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/background_library/packing_table/packing_table.usd"
+    initial_pose = Pose(position_xyz=(0.72193, -0.04727, -0.92512), rotation_xyzw=(0.0, 0.0, -0.70711, 0.70711))
+    object_min_z = -0.2
+
+    def __init__(self):
+        super().__init__()
+
+
+@register_asset
+class GalileoBackground(LibraryBackground):
+    """
+    Encapsulates the background scene for the galileo room.
+    """
+
+    name = "galileo"
+    tags = ["background"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/background_library/galileo_simplified/galileo_simplified.usd"
+    initial_pose = Pose(position_xyz=(4.420, 1.408, -0.795), rotation_xyzw=(0.0, 0.0, 0.0, 1.0))
+    object_min_z = -0.2
+
+    def __init__(self):
+        super().__init__()
+
+
+@register_asset
+class GalileoLocomanipBackground(LibraryBackground):
+    """
+    Encapsulates the background scene for the galileo room for locomanip.
+    """
+
+    name = "galileo_locomanip"
+    tags = ["background"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/background_library/galileo_locomanip/galileo_locomanip.usd"
+    initial_pose = Pose(position_xyz=(4.420, 1.408, -0.795), rotation_xyzw=(0.0, 0.0, 0.0, 1.0))
+    object_min_z = -0.2
+
+    def __init__(self):
+        super().__init__()
+
+
+@register_asset
+class Table(LibraryBackground):
+    """
+    A table.
+    """
+
+    name = "table"
+    tags = ["background"]
+    usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd"
+    object_min_z = -0.05
+
+    def __init__(self):
+        super().__init__()
+
+
+@register_asset
+class OfficeTableBackground(LibraryBackground):
+    """
+    A basic office table.
+    """
+
+    name = "office_table_background"
+    tags = ["background"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Mimic/nut_pour_task/nut_pour_assets/table.usd"
+    object_min_z = -0.05
+    scale = (1.0, 1.0, 0.7)
+    spawn_cfg_addon = {
+        "rigid_props": sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+    }
+
+    def __init__(self):
+        super().__init__(scale=self.scale)
+
+
+@register_asset
+class LightwheelKitchenBackground(LibraryBackground):
+    """
+    Encapsulates the background scene for the Lightwheel Robocasa kitchen.
+    """
+
+    name = "lightwheel_robocasa_kitchen"
+    tags = ["background", "lightwheel", "kitchen"]
+    usd_path = None
+    initial_pose = Pose.identity()
+    object_min_z = -0.2
+    layout_id = 1
+    style_id = 1
+
+    def __init__(
+        self,
+        layout_id: int | None = None,
+        style_id: int | None = None,
+        **kwargs,
+    ):
+        from lightwheel_sdk.loader import floorplan_loader
+
+        if layout_id is None:
+            layout_id = self.layout_id
+        if style_id is None:
+            style_id = self.style_id
+
+        # Lazily download the USD
+        self.usd_path = str(
+            acquire_lightwheel_asset(
+                floorplan_loader,
+                floorplan_loader.get_usd,
+                description=f"{self.name} background layout={layout_id} style={style_id}",
+                scene="robocasakitchen",
+                layout_id=layout_id,
+                style_id=style_id,
+                backend="robocasa",
+            )[0]
+        )
+        super().__init__(**kwargs)
+
+    def get_viewer_cfg(self) -> ViewerCfg:
+        # Looking in through the open front.
+        return ViewerCfg(eye=(2.75, -5.5, 1.5), lookat=(2.75, -1.4, 0.9))
+
+
+# `globals()` makes it possible to expose the generated classes as module-level classes
+# so they can be imported like other background classes.
+register_lightwheel_kitchens(LightwheelKitchenBackground, globals())
+
+
+@register_asset
+class MapleTableRobolab(LibraryBackground):
+    """
+    A maple table background from the Robolab assets.
+    """
+
+    name = "maple_table_robolab"
+    tags = ["background", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/scenes/maple_table.usda"
+    object_min_z = -0.05
+
+    def __init__(self):
+        super().__init__()
+
+
+@register_asset
+class TableOakRobolab(LibraryBackground):
+    name = "table_oak_robolab"
+    tags = ["background", "robolab"]
+    usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/fixtures/table_oak.usd"
+    object_min_z = -0.05
+
+
+# -----------------------------------------------------------------------------
+# Replicator kitchen backgrounds
+# -----------------------------------------------------------------------------
+
+
+class ReplicatorKitchenBackground(LibraryBackground):
+    """Base class for Replicator-generated kitchen floorplans."""
+
+    tags = ["background", "replicator"]
+    initial_pose = Pose.identity()
+    object_min_z = -0.2
+
+    def get_viewer_cfg(self) -> ViewerCfg:
+        return ViewerCfg(eye=(0.0, -1.0, 1.65), lookat=(0.0, 0.0, 1.35))
+
+
+@register_asset
+class ReplicatorKitchenGShape(ReplicatorKitchenBackground):
+    """Replicator G-shaped kitchen."""
+
+    name = "replicator_kitchen_g_shape"
+    usd_path = f"{ISAAC_STAGING_NUCLEUS_DIR}/Environments/replicator_kitchen/kitchen_g_shape.usda"
+
+
+@register_asset
+class ReplicatorKitchenLIsland(ReplicatorKitchenBackground):
+    """Replicator L-shaped kitchen with an island."""
+
+    name = "replicator_kitchen_l_island"
+    usd_path = f"{ISAAC_STAGING_NUCLEUS_DIR}/Environments/replicator_kitchen/kitchen_l_island.usda"
+
+
+@register_asset
+class ReplicatorKitchenLShape(ReplicatorKitchenBackground):
+    """Replicator L-shaped kitchen."""
+
+    name = "replicator_kitchen_l_shape"
+    usd_path = f"{ISAAC_STAGING_NUCLEUS_DIR}/Environments/replicator_kitchen/kitchen_l_shape.usda"
+
+
+@register_asset
+class ReplicatorKitchenPeninsula(ReplicatorKitchenBackground):
+    """Replicator kitchen with a peninsula."""
+
+    name = "replicator_kitchen_peninsula"
+    usd_path = f"{ISAAC_STAGING_NUCLEUS_DIR}/Environments/replicator_kitchen/kitchen_peninsula.usda"
+
+
+@register_asset
+class ReplicatorKitchenUShape(ReplicatorKitchenBackground):
+    """Replicator U-shaped kitchen."""
+
+    name = "replicator_kitchen_u_shape"
+    usd_path = f"{ISAAC_STAGING_NUCLEUS_DIR}/Environments/replicator_kitchen/kitchen_u_shape.usda"

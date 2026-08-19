@@ -1,0 +1,27 @@
+[build-system]
+requires = [
+    "setuptools>=42",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pharm_flow"
+version = "0.1.0"
+description = "PharmFlow - Pharmaceutical task data collection based on Isaac Lab Arena"
+dependencies = [
+    "pin-pink==3.1.0",
+    "qpsolvers==4.8.1",
+    "grpcio>1.73",
+    "protobuf>6",
+    "pynput",
+    "mediapy",
+    "tqdm",
+    "pandas",
+    "vuer[all]",
+    "onnxruntime",
+    "zmq",
+    "lazy-import",
+    "flask",
+    "tyro",
+]

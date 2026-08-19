@@ -1,0 +1,97 @@
+# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+from abc import ABC, abstractmethod
+from typing import Any
+
+from isaaclab.envs.common import ViewerCfg
+from isaaclab.managers.recorder_manager import RecorderManagerBaseCfg
+
+from isaaclab_arena.assets.asset import Asset
+from isaaclab_arena.assets.object import Object
+from isaaclab_arena.embodiments.common.arm_mode import ArmMode
+from isaaclab_arena.metrics.metric_base import MetricBase
+from isaaclab_arena.progress_tracking.progress_objective import ProgressObjective
+from isaaclab_arena.relations.relations import RequiresReachability
+from isaaclab_arena.tasks.task_transition import TaskTransition
+
+
+class TaskBase(ABC):
+
+    DEFAULT_EPISODE_LENGTH_S: float = 70.0
+
+    def __init__(self, episode_length_s: float | None = None, task_description: str | None = None):
+        self.episode_length_s = episode_length_s if episode_length_s is not None else self.DEFAULT_EPISODE_LENGTH_S
+        self.task_description = task_description
+
+    @abstractmethod
+    def get_scene_cfg(self) -> Any:
+        raise NotImplementedError("Function not implemented yet.")
+
+    @abstractmethod
+    def get_termination_cfg(self) -> Any:
+        raise NotImplementedError("Function not implemented yet.")
+
+    @abstractmethod
+    def get_events_cfg(self) -> Any:
+        raise NotImplementedError("Function not implemented yet.")
+
+    @abstractmethod
+    def get_mimic_env_cfg(self, arm_mode: ArmMode) -> Any:
+        raise NotImplementedError("Function not implemented yet.")
+
+    @abstractmethod
+    def get_metrics(self) -> list[MetricBase]:
+        raise NotImplementedError("Function not implemented yet.")
+
+    def get_observation_cfg(self) -> Any:
+        return None
+
+    def get_rewards_cfg(self) -> Any:
+        return None
+
+    def get_curriculum_cfg(self) -> Any:
+        return None
+
+    def get_commands_cfg(self) -> Any:
+        return None
+
+    def get_recorder_term_cfg(self) -> RecorderManagerBaseCfg:
+        return None
+
+    def get_viewer_cfg(self) -> ViewerCfg:
+        return ViewerCfg()
+
+    def get_episode_length_s(self) -> float:
+        return self.episode_length_s
+
+    def get_task_description(self) -> str | None:
+        return self.task_description
+
+    def get_progress_objectives(self) -> list[ProgressObjective]:
+        return []
+
+    def apply_reachability_constraints(self) -> None:
+        """Stamp RequiresReachability on the objects the robot must be able to reach for this task."""
+        pass
+
+    def _apply_reachability_constraints(self, targets: list[Asset]) -> None:
+        """Stamp RequiresReachability on each placed object in targets.
+
+        An object reference or a background location is a static, non-placed asset and is skipped;
+        only placed objects are IK-checked during layout validation.
+        """
+        for target in targets:
+            if isinstance(target, Object) and not target.has_relation(RequiresReachability):
+                target.add_relation(RequiresReachability())
+
+    @classmethod
+    def success_state_transition(cls, **_) -> TaskTransition:
+        """Inform constraint resolution what the task's success condition implies about the state change.
+
+        Resolution forwards all of the task's args; subclasses override this to bind the ones they act
+        on as named parameters and absorb the rest with ``**_``.
+        """
+        raise NotImplementedError("success_state_transition not implemented yet.")

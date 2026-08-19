@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# Environments
+.venv/
+env/
+venv/
+env_isaaclab/
+
+# Logs / datasets
+*.log
+pharm_flow_logs/
+outputs/
+experiments/
+
+# Misc
+.DS_Store
+*.swp
+nohup.out

@@ -1,0 +1,296 @@
+# Generic scene specification for the RLinf IsaacLab task.
+scene:
+  collection:
+    task: biomedical_droid
+    environment: isaaclab_biomedical
+    robot: droid
+    expert: biomedical_curobo
+
+  # Keep cloned environments visually isolated so policy cameras never observe
+  # neighboring workcells.
+  environment_spacing: 40.0
+
+  task:
+    language_instruction: >-
+      Pick one medicine bottle from the open carton, grasp it securely with the
+      DROID gripper, lift it clear of the carton, rotate it upright, place it
+      within the valid region of the conveyor belt, release it, and return the
+      arm to its home pose.
+    target_components:
+      - medicine_bottle_00
+      - medicine_bottle_01
+      - medicine_bottle_02
+      - medicine_bottle_03
+      - medicine_bottle_04
+      - medicine_bottle_05
+      - medicine_bottle_06
+      - medicine_bottle_07
+      - medicine_bottle_08
+      - medicine_bottle_09
+    conveyor_component: conveyor_surface
+    # The same XY region is used by conveyor motion and task success.
+    conveyor_region_margin: 0.05
+    # A bottle counts only after the gripper has released it in that region.
+    success_requires_release: true
+    # A bottle must rest with its declared long axis aligned to world Z.
+    success_requires_upright: true
+    min_upright_cosine: 0.95
+    # IsaacLab reset-event configuration for the reusable medicine-object pool.
+    # Add more candidate components below to support additional bottle types.
+    target_randomization:
+      enabled: true
+      count_range: [2, 6]
+      pose_range:
+        x: [-0.01, 0.01]
+        y: [-0.01, 0.01]
+        z: [0.0, 0.0]
+        yaw: [-3.141592653589793, 3.141592653589793]
+      # Only the horizontal heading is randomized. Roll and pitch remain fixed
+      # so the scripted expert can pick the known horizontal source pose,
+      # rotate it upright while held, and place it vertically on the belt.
+      # The scaled open-carton bottom top is z=0.7906.  Active bottle roots
+      # are placed from this physical support plane, not from the tabletop;
+      # the carton bottom occupies the tabletop-to-carton interval below it.
+      support_surface_z: 0.7906
+      surface_clearance: 0.005
+      inactive_position_offset: [0.0, 0.0, -10.0]
+    rewards:
+      reach_weight: 1.0
+      reach_scale: 0.15
+      lift_weight: 3.0
+      lift_height: 0.03
+      grasp_distance: 0.12
+      transport_weight: 5.0
+      transport_scale: 0.30
+      success_bonus: 20.0
+    # Automatic Mimic collection uses these task-level planner parameters.
+    # The collector and planner remain robot/task agnostic; future medicine
+    # types only need their extents and task-specific values here.
+    auto_collection:
+      # Ordered semantic skills.  The cuRobo expert consumes this graph while
+      # retaining the existing planner and physical verification contracts.
+      pipeline:
+        - approach
+        - grasp
+        - hold_grasp
+        - lift
+        - transport
+        - reorient
+        - place
+        - hold_release
+        - release_lift
+        - home
+      # Resolve PhysX contact before the expert reads bottle poses. This
+      # removes reset-induced vertical settling and small horizontal drift
+      # from the grasp target instead of applying a fixed pose offset.
+      reset_settle_steps: 32
+      approach_clearance: 0.08
+      # Aligned.usda already contains the source-to-root alignment. Do not
+      # apply a second task-level rotation to grasp annotations.
+      interaction_frame_rotation: [0.0, 0.0, 0.0, 1.0]
+      # Use the medicine asset's authored contact-center grasp annotations.
+      # Robot-specific TCP translation is defined by the DROID embodiment;
+      # no task-level positional correction is applied here.
+      max_grasp_candidates: 300
+      feasible_grasp_candidates: 8
+      # DROID uses a different base_link axis convention. Let cuRobo IK choose
+      # the reachable middle grasp.
+      disable_upside_down: false
+      # Keep only annotations whose required opening matches the physical
+      # medicine bottle short diameter (6.2 cm after its authored scale).
+      minimum_grasp_width_ratio: 0.9
+      # Do not let the closed pad centers extend far beyond the bottle's
+      # short circular section, which can make a finger hit the carton wall.
+      maximum_grasp_width_ratio: 1.05
+      # Keep the TCP at the bottle middle section rather than at an end-cap
+      # or near the carton edge.
+      max_grasp_center_offset: 0.005
+      # Aligned.usda's long bottle axis is local/root Y; upright_axis below
+      # remains the separate post-placement vertical axis.
+      grasp_long_axis: [0.0, 1.0, 0.0]
+      lift_height: 0.20
+      # Move above the belt first, then lower at a smaller joint waypoint step.
+      place_clearance: 0.10
+      release_clearance: 0.005
+      retreat_clearance: 0.10
+      hold_steps: 12
+      waypoint_step: 0.02
+      # Keep the placement trajectory within the expert's per-stage action
+      # budget; 8 mm generated hundreds of redundant waypoints for the short
+      # conveyor descent and caused deterministic timeout resets.  30 mm is
+      # still below the DROID arm's stable position-control increment while
+      # avoiding a long sequence of nearly identical targets.
+      place_waypoint_step: 0.03
+      # The collector uses cuRobo's primitive collision world. The large
+      # clinic background, sorting-machine shell, robot, and dynamic bottles
+      # are excluded by the planner adapter; workcell supports such as the
+      # table, carton, and conveyor remain available for collision planning.
+      collision_checker: PRIMITIVE
+      enable_graph: false
+      use_cuda_graph: false
+      # Do not compile cuRobo's graph/cache during task construction. The
+      # first target plan performs the same initialization after the Kit
+      # event loop is running, avoiding the startup-only CUDA/PhysX failure.
+      warmup: false
+
+  workcell:
+    # Workcell geometry on the bare floor (no clinic backdrop). The complete
+    # workcell occupies approximately x=[16.3, 22.3], y=[9.5, 14.9].
+    table_position: [18.8, 10.5, 0.375]
+    table_size: [5.0, 1.65, 0.75]
+    # The RLinf DROID task uses the official robot USD without the optional stand.
+    # Place its panda_link0 directly on the workcell surface.
+    # Keep the robot, carton, and conveyor inside the tabletop footprint:
+    # x=[16.3, 21.3], y=[9.70, 11.30], tabletop z=0.75.
+    robot_position: [17.58, 10.50, 0.75]
+    # DROID +X faces the conveyor travel direction; -Y is the robot's right side.
+    robot_rotation: [0.0, 0.0, 0.0, 1.0]
+
+  components:
+    - name: conveyor_base
+      kind: static
+      # The robot-facing end stays close to the arm; extend toward the machine.
+      position: [19.425, 10.50, 0.66]
+      size: [3.35, 0.64, 0.18]
+      color: [0.12, 0.14, 0.18]
+    - name: conveyor_surface
+      kind: static
+      # Only the 2.5 cm belt surface remains above the tabletop.
+      position: [19.375, 10.50, 0.7625]
+      size: [3.25, 0.56, 0.025]
+      color: [0.04, 0.05, 0.06]
+      motion:
+        type: conveyor
+        axis: X
+        speed: 0.24
+        bounds: [17.78, 21.03]
+        surface_height_tolerance: 0.04
+        surface_clearance: 0.005
+    - name: conveyor_roller_left
+      kind: conveyor_roller
+      position: [17.72, 10.50, 0.785]
+      size: [0.045, 0.045, 0.56]
+      color: [0.35, 0.38, 0.42]
+      axis: Y
+      motion:
+        type: rotate
+        speed: 16.0
+    - name: conveyor_roller_right
+      kind: conveyor_roller
+      position: [21.08, 10.50, 0.785]
+      size: [0.045, 0.045, 0.56]
+      color: [0.35, 0.38, 0.42]
+      axis: Y
+      motion:
+        type: rotate
+        speed: 16.0
+
+    - name: medicine_carton_open
+      # The authored carton bottom starts 0.0087 m below its root after the
+      # configured Z scale. Align that lowest point with the tabletop at z=0.75.
+      kind: usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/biomedical/medicine_carton_open/open_cardboard_carton.usda"
+      # Keep the carton on the robot's right (-Y), just clear of the widened belt.
+      position: [17.78, 10.00, 0.7413]
+      # Widen and lengthen the carton for gripper clearance; preserve wall height.
+      scale: [1.3, 1.3, 0.58]
+      # The bottle pool is dynamic. Keep the authored bottom and walls as the
+      # physical support/containment geometry so bottles settle in the carton
+      # instead of falling through it onto the tabletop.
+      collision_enabled: true
+      mass: 0.35
+
+    - name: medicine_bottle_00
+      kind: rigid_usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/benchmark/medicine_bottle/benchmark_medicine_bottle_000/Aligned.usda"
+      position: [17.60, 9.90, 0.8508]
+      # Aligned.usda already contains the required source-to-root alignment.
+      rotation: [0.0, 0.0, 0.0, 1.0]
+      scale: [1.0, 1.0, 1.0]
+      # Aligned.usda rotates its visual bottle +90 degrees around root X.
+      # These half extents and long axis are therefore expressed in the
+      # RigidObject root frame used by IsaacLab, not the nested visual frame.
+      support_extents: [0.030762486, 0.055153478, 0.031036845]
+      upright_axis: [0.0, 1.0, 0.0]
+      mass: 0.12
+    - name: medicine_bottle_01
+      kind: rigid_usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/benchmark/medicine_bottle/benchmark_medicine_bottle_000/Aligned.usda"
+      position: [17.69, 9.90, 0.8508]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+      scale: [1.0, 1.0, 1.0]
+      support_extents: [0.030762486, 0.055153478, 0.031036845]
+      upright_axis: [0.0, 1.0, 0.0]
+      mass: 0.12
+    - name: medicine_bottle_02
+      kind: rigid_usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/benchmark/medicine_bottle/benchmark_medicine_bottle_000/Aligned.usda"
+      position: [17.78, 9.90, 0.8508]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+      scale: [1.0, 1.0, 1.0]
+      support_extents: [0.030762486, 0.055153478, 0.031036845]
+      upright_axis: [0.0, 1.0, 0.0]
+      mass: 0.12
+    - name: medicine_bottle_03
+      kind: rigid_usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/benchmark/medicine_bottle/benchmark_medicine_bottle_000/Aligned.usda"
+      position: [17.87, 9.90, 0.8508]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+      scale: [1.0, 1.0, 1.0]
+      support_extents: [0.030762486, 0.055153478, 0.031036845]
+      upright_axis: [0.0, 1.0, 0.0]
+      mass: 0.12
+    - name: medicine_bottle_04
+      kind: rigid_usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/benchmark/medicine_bottle/benchmark_medicine_bottle_000/Aligned.usda"
+      position: [17.96, 9.90, 0.8508]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+      scale: [1.0, 1.0, 1.0]
+      support_extents: [0.030762486, 0.055153478, 0.031036845]
+      upright_axis: [0.0, 1.0, 0.0]
+      mass: 0.12
+    - name: medicine_bottle_05
+      kind: rigid_usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/benchmark/medicine_bottle/benchmark_medicine_bottle_000/Aligned.usda"
+      position: [17.60, 10.10, 0.8508]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+      scale: [1.0, 1.0, 1.0]
+      support_extents: [0.030762486, 0.055153478, 0.031036845]
+      upright_axis: [0.0, 1.0, 0.0]
+      mass: 0.12
+    - name: medicine_bottle_06
+      kind: rigid_usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/benchmark/medicine_bottle/benchmark_medicine_bottle_000/Aligned.usda"
+      position: [17.69, 10.10, 0.8508]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+      scale: [1.0, 1.0, 1.0]
+      support_extents: [0.030762486, 0.055153478, 0.031036845]
+      upright_axis: [0.0, 1.0, 0.0]
+      mass: 0.12
+    - name: medicine_bottle_07
+      kind: rigid_usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/benchmark/medicine_bottle/benchmark_medicine_bottle_000/Aligned.usda"
+      position: [17.78, 10.10, 0.8508]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+      scale: [1.0, 1.0, 1.0]
+      support_extents: [0.030762486, 0.055153478, 0.031036845]
+      upright_axis: [0.0, 1.0, 0.0]
+      mass: 0.12
+    - name: medicine_bottle_08
+      kind: rigid_usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/benchmark/medicine_bottle/benchmark_medicine_bottle_000/Aligned.usda"
+      position: [17.87, 10.10, 0.8508]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+      scale: [1.0, 1.0, 1.0]
+      support_extents: [0.030762486, 0.055153478, 0.031036845]
+      upright_axis: [0.0, 1.0, 0.0]
+      mass: 0.12
+    - name: medicine_bottle_09
+      kind: rigid_usd
+      usd_path: "${PHARM_FLOW_ROOT}/assets/objects/benchmark/medicine_bottle/benchmark_medicine_bottle_000/Aligned.usda"
+      position: [17.96, 10.10, 0.8508]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+      scale: [1.0, 1.0, 1.0]
+      support_extents: [0.030762486, 0.055153478, 0.031036845]
+      upright_axis: [0.0, 1.0, 0.0]
+      mass: 0.12
