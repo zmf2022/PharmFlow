@@ -1,8 +1,8 @@
 # PharmFlow
 
-**PharmFlow（药房流程）**：基于 Isaac Lab–Arena 的**药品到传送带**（biomedical_droid）数据采集项目，是 EmbodiedFusion 中最小化的独立子集，专注「从打开的纸箱中抓取药瓶 → 旋转扶正 → 放到传送带上」这一数据采集链路。
+**PharmFlow（药房流程）**：基于 Isaac Lab–Arena 的**药品到传送带**（biomedical_droid）数据采集项目，专注「从打开的纸箱中抓取药瓶 → 旋转扶正 → 放到传送带上」这一数据采集链路。
 
-**PharmFlow 是一个轻量、自包含的数据采集项目**，不包含 EmbodiedFusion 的强化学习训练、策略评估、多机器人、遥操作硬件驱动等能力，只保留真正用于 biomedical 数据采集的最小代码与资产。
+**PharmFlow 是一个轻量、自包含的数据采集项目**，聚焦于 biomedical 数据采集链路，提供可复现的最小代码与资产。
 
 ---
 
